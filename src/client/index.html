@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <link rel="stylesheet" type="text/css" href="index.css" />
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, width=device-width, height=device-height, user-scalable=0"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="full-screen" content="yes" />
+    <meta name="x5-fullscreen" content="true" />
+    <meta name="360-fullscreen" content="true" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  </head>
+  <body>
+    <canvas id="bg"></canvas>
+    
+    <!-- Game UI Overlay -->
+    <div class="game-ui">
+      <!-- Start Screen -->
+      <div id="start-screen" class="start-screen">
+        <h1 id="title">Shape3D</h1>
+        <p class="game-description">Multiplayer 3D Building Game</p>
+        
+        <!-- Leaderboard -->
+        <div id="leaderboard" class="leaderboard">
+          <h3>🏆 Leaderboard</h3>
+          <div id="leaderboard-list" class="leaderboard-list">
+            <div class="leaderboard-empty">No scores yet - be the first to complete a challenge!</div>
+          </div>
+        </div>
+        
+        <div class="start-controls">
+          <button id="start-btn" class="start-button">Start Game</button>
+          <button id="how-to-play-btn" class="how-to-play-button">How to Play</button>
+        </div>
+      </div>
+
+      <!-- How to Play Modal -->
+      <div id="how-to-play-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+          <span class="close" onclick="closeHowToPlay()">&times;</span>
+          <h2>How to Play Shape3D</h2>
+          <div class="guide-section">
+            <h3>🎯 Objective</h3>
+            <p>Build in a shared 3D space and compete in timed challenges!</p>
+          </div>
+          <div class="guide-section">
+            <h3>🎮 Controls</h3>
+            <ul>
+              <li><strong>WASD/Arrow Keys:</strong> Move preview cube horizontally</li>
+              <li><strong>Q/E/Up/Down Arrows:</strong> Move preview cube up/down</li>
+              <li><strong>Space:</strong> Place shape at preview position</li>
+              <li><strong>Mouse Drag:</strong> Rotate camera view</li>
+              <li><strong>Arrow Buttons:</strong> Mobile movement controls</li>
+            </ul>
+          </div>
+          <div class="guide-section">
+            <h3>⚡ Challenges</h3>
+            <p>Every 30 seconds, yellow highlights appear showing where to place specific shapes and colors. Race other players to complete them first!</p>
+          </div>
+          <div class="guide-section">
+            <h3>🔧 Building</h3>
+            <p>Choose shapes (cube, triangle, sphere) and colors from the toolbox. Build up to 10 levels high on the 20x20 grid!</p>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Top Left Challenge Info -->
+      <div id="challenge-info" class="challenge-info-small" style="display: none;">
+        <div class="challenge-icon">⚡</div>
+        <div class="challenge-text">
+          <span class="challenge-title">Challenge Active!</span>
+          <span class="challenge-round">Round 1 of 5</span>
+          <span class="challenge-desc">Place highlighted shapes</span>
+        </div>
+      </div>
+      
+      <!-- Bottom Left Toolbox -->
+      <div id="toolbox" class="toolbox-left" style="display: none;">
+        <div class="toolbox-header">
+          <button id="place-btn" class="place-button" onclick="placeCurrentShape()">Place Shape</button>
+          <button id="toolbox-toggle" class="toolbox-toggle">▼</button>
+        </div>
+        
+        <div id="toolbox-content" class="toolbox-content">
+          <!-- Row 1: Shapes -->
+          <div class="tool-row">
+            <div id="shape-buttons" class="button-row"></div>
+          </div>
+          
+          <!-- Row 2: First 3 Colors -->
+          <div class="tool-row">
+            <div id="color-buttons-1" class="button-row"></div>
+          </div>
+          
+          <!-- Row 3: Last 3 Colors -->
+          <div class="tool-row">
+            <div id="color-buttons-2" class="button-row"></div>
+          </div>
+          
+          <!-- Row 4: Movement Controls -->
+          <div class="tool-row mobile-controls">
+            <div class="movement-grid">
+              <!-- Column 1: Forward/Back -->
+              <div class="move-column">
+                <button class="move-btn">↑</button>
+                <button class="move-btn">↓</button>
+              </div>
+              <!-- Column 2: Left/Right -->
+              <div class="move-column">
+                <button class="move-btn">←</button>
+                <button class="move-btn">→</button>
+              </div>
+              <!-- Column 3: Up/Down (Height) -->
+              <div class="move-column">
+                <button class="move-btn">▲</button>
+                <button class="move-btn">▼</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+
+    </div>
+    
+    <script type="module" src="main.ts" defer></script>
+  </body>
+</html>
