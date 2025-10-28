@@ -13,11 +13,11 @@ export const createPost = async () => {
     splash: {
       // Clean and Simple Splash Screen
       appDisplayName: 'Shape3D',
-      backgroundUri: 'default-splash.png',
+      backgroundUri: 'splash.png',
       buttonLabel: 'Start Playing',
-      description: `🎮 Collaborative 3D building with challenges!`,
+      description: ``,
       heading: 'Shape3D',
-      appIconUri: 'default-icon.png',
+      appIconUri: 'icon2_nobg.png',
     },
     postData: {
       gameState: 'initial',

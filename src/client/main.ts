@@ -965,19 +965,20 @@ function showFirstPlaceBonusNotification(): void {
   const bonusMsg = document.createElement('div');
   bonusMsg.className = 'first-place-bonus';
   bonusMsg.innerHTML = `
-    <div class="bonus-icon">🥇</div>
-    <div class="bonus-text">FIRST PLACE!</div>
-    <div class="bonus-subtext">+1 Bonus Point for being first in this round!</div>
+    <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 2px;">
+      <span class="bonus-icon">🥇</span>
+    </div>
+    <div class="bonus-subtext">+1 Bonus Point</div>
   `;
 
   document.body.appendChild(bonusMsg);
 
-  // Remove message after 4 seconds
+  // Remove message after 2 seconds
   setTimeout(() => {
     if (bonusMsg.parentNode) {
       bonusMsg.parentNode.removeChild(bonusMsg);
     }
-  }, 4000);
+  }, 2000);
 }
 
 // Show game over display with leaderboard

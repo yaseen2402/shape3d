@@ -456,12 +456,11 @@ router.post('/api/place', async (req, res): Promise<void> => {
     gameState.shapes.push(newShape);
     
     // Update player score if it was a valid challenge move
-    let bonusMessage = '';
+
     if (isValidMove) {
       if (isFirstPlacement) {
         // Give 2 points for first placement (1 regular + 1 bonus)
         updatePlayerScore(gameState, username ?? 'anonymous', 2);
-        bonusMessage = ' (+1 First Place Bonus!)';
       } else {
         // Give 1 point for regular placement
         updatePlayerScore(gameState, username ?? 'anonymous', 1);
@@ -507,7 +506,7 @@ router.post('/api/place', async (req, res): Promise<void> => {
       success: true,
       shape: newShape,
       gameState: updatedGameState,
-      message: `${username ?? 'Anonymous'} placed a ${request.color} ${request.type}${bonusMessage}`,
+      message: `${username ?? 'Anonymous'} placed a ${request.color} ${request.type}`,
       playerName: username ?? 'Anonymous',
       isFirstPlacement: isFirstPlacement
     } as PlaceShapeResponse);
