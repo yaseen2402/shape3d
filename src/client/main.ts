@@ -7,8 +7,7 @@ import {
   ShapeType,
   ShapeColor,
   Position3D,
-  GameState,
-  PlayerScore
+  GameState
 } from '../shared/types/api';
 
 // Game state
@@ -30,11 +29,87 @@ let isPreviewMode = false;
 // 3D Scene setup
 const canvas = document.getElementById('bg') as HTMLCanvasElement;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87CEEB); // Sky blue
+// No scene background - using transparent renderer to show CSS gradient
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(22, 22, 22); // Moved back to accommodate larger grid
 camera.lookAt(0, 0, 0);
+
+// Create arena background with large shapes
+function createArenaBackground(): void {
+  const arenaShapes: THREE.Mesh[] = [];
+
+  // Large background cubes
+  const cubeGeometry = new THREE.BoxGeometry(8, 8, 8);
+  const cubeMaterial = new THREE.MeshLambertMaterial({
+    color: 0x34495e,
+    transparent: true,
+    opacity: 0.3
+  });
+
+  // Large background spheres
+  const sphereGeometry = new THREE.SphereGeometry(6, 16, 12);
+  const sphereMaterial = new THREE.MeshLambertMaterial({
+    color: 0x3498db,
+    transparent: true,
+    opacity: 0.2
+  });
+
+  // Large background triangles (cones)
+  const triangleGeometry = new THREE.ConeGeometry(5, 10, 3);
+  const triangleMaterial = new THREE.MeshLambertMaterial({
+    color: 0xe74c3c,
+    transparent: true,
+    opacity: 0.25
+  });
+
+  // Position large shapes around the arena
+  const positions = [
+    { x: -40, y: 15, z: -40 },
+    { x: 40, y: 20, z: -40 },
+    { x: -40, y: 18, z: 40 },
+    { x: 40, y: 12, z: 40 },
+    { x: 0, y: 25, z: -50 },
+    { x: -50, y: 10, z: 0 },
+    { x: 50, y: 22, z: 0 },
+    { x: 0, y: 16, z: 50 }
+  ];
+
+  positions.forEach((pos, index) => {
+    let mesh: THREE.Mesh;
+    const shapeType = index % 3;
+
+    if (shapeType === 0) {
+      mesh = new THREE.Mesh(cubeGeometry, cubeMaterial);
+    } else if (shapeType === 1) {
+      mesh = new THREE.Mesh(sphereGeometry, sphereMaterial);
+    } else {
+      mesh = new THREE.Mesh(triangleGeometry, triangleMaterial);
+    }
+
+    mesh.position.set(pos.x, pos.y, pos.z);
+    mesh.rotation.x = Math.random() * Math.PI;
+    mesh.rotation.y = Math.random() * Math.PI;
+    mesh.rotation.z = Math.random() * Math.PI;
+
+    scene.add(mesh);
+    arenaShapes.push(mesh);
+  });
+
+  // Add subtle rotation animation to background shapes
+  function animateArenaShapes(): void {
+    arenaShapes.forEach((shape, index) => {
+      shape.rotation.x += 0.001 * (index % 2 === 0 ? 1 : -1);
+      shape.rotation.y += 0.002 * (index % 3 === 0 ? 1 : -1);
+    });
+  }
+
+  // Store the animation function globally so it can be called from the main animate loop
+  (window as any).animateArenaShapes = animateArenaShapes;
+}
+
+// Initialize arena background
+createArenaBackground();
 
 // Camera controls
 let isMouseDown = false;
@@ -44,20 +119,35 @@ const cameraDistance = 35; // Increased for larger grid
 let cameraAngleX = Math.PI / 6; // 30 degrees
 let cameraAngleY = Math.PI / 4; // 45 degrees
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, canvas });
+const renderer = new THREE.WebGLRenderer({ antialias: true, canvas, alpha: true });
 renderer.setPixelRatio(window.devicePixelRatio ?? 1);
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x000000, 0); // Transparent background
 // Shadows disabled for cleaner look
 renderer.shadowMap.enabled = false;
 
-// Lighting
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+// Arena Lighting
+const ambientLight = new THREE.AmbientLight(0x404040, 0.4); // Dimmer ambient for arena feel
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-directionalLight.position.set(10, 20, 5);
-// Shadow casting disabled
+// Main directional light (like arena spotlights)
+const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+directionalLight.position.set(10, 30, 5);
 scene.add(directionalLight);
+
+// Additional arena spotlights
+const spotlight1 = new THREE.DirectionalLight(0x3498db, 0.3);
+spotlight1.position.set(-20, 25, -20);
+scene.add(spotlight1);
+
+const spotlight2 = new THREE.DirectionalLight(0xe74c3c, 0.3);
+spotlight2.position.set(20, 25, 20);
+scene.add(spotlight2);
+
+// Subtle colored rim lighting
+const rimLight = new THREE.DirectionalLight(0x9b59b6, 0.2);
+rimLight.position.set(0, 10, -30);
+scene.add(rimLight);
 
 // Ground plane - White surface with larger grid squares for bigger shapes
 const GRID_SIZE = 20; // Number of grid squares (same as before)
@@ -143,6 +233,15 @@ function createShape(type: ShapeType, color: ShapeColor, position: Position3D, i
 //   return { x, y, z };
 // }
 
+// Camera animation state
+let isAnimatingCamera = false;
+let animationStartTime = 0;
+let startAngleX = 0;
+let startAngleY = 0;
+let targetAngleX = 0;
+let targetAngleY = 0;
+const CAMERA_ANIMATION_DURATION = 800; // 800ms for smooth transition
+
 // Camera control functions
 function updateCameraPosition(): void {
   const x = Math.cos(cameraAngleY) * Math.cos(cameraAngleX) * cameraDistance;
@@ -151,6 +250,62 @@ function updateCameraPosition(): void {
 
   camera.position.set(x, y, z);
   camera.lookAt(0, 0, 0);
+}
+
+// Smooth camera animation function
+function animateCameraToPosition(newAngleX: number, newAngleY: number): void {
+  if (isAnimatingCamera) return; // Prevent multiple animations
+
+  startAngleX = cameraAngleX;
+  startAngleY = cameraAngleY;
+  targetAngleX = newAngleX;
+  targetAngleY = newAngleY;
+
+  // Handle Y angle wrapping for shortest path
+  let deltaY = targetAngleY - startAngleY;
+  if (deltaY > Math.PI) {
+    targetAngleY -= Math.PI * 2;
+  } else if (deltaY < -Math.PI) {
+    targetAngleY += Math.PI * 2;
+  }
+
+  isAnimatingCamera = true;
+  animationStartTime = Date.now();
+
+  console.log(`🎬 Starting camera animation from (${(startAngleX * 180 / Math.PI).toFixed(1)}°, ${(startAngleY * 180 / Math.PI).toFixed(1)}°) to (${(targetAngleX * 180 / Math.PI).toFixed(1)}°, ${(targetAngleY * 180 / Math.PI).toFixed(1)}°)`);
+}
+
+// Easing function for smooth animation
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+// Update camera animation (called from main animation loop)
+function updateCameraAnimation(): void {
+  if (!isAnimatingCamera) return;
+
+  const elapsed = Date.now() - animationStartTime;
+  const progress = Math.min(elapsed / CAMERA_ANIMATION_DURATION, 1);
+  const easedProgress = easeInOutCubic(progress);
+
+  // Interpolate angles
+  cameraAngleX = startAngleX + (targetAngleX - startAngleX) * easedProgress;
+  cameraAngleY = startAngleY + (targetAngleY - startAngleY) * easedProgress;
+
+  updateCameraPosition();
+
+  // Check if animation is complete
+  if (progress >= 1) {
+    isAnimatingCamera = false;
+    cameraAngleX = targetAngleX;
+    cameraAngleY = targetAngleY;
+
+    // Normalize Y angle after animation
+    while (cameraAngleY >= Math.PI * 2) cameraAngleY -= Math.PI * 2;
+    while (cameraAngleY < 0) cameraAngleY += Math.PI * 2;
+
+    console.log(`✅ Camera animation complete`);
+  }
 }
 
 // Handle mouse movement for camera and preview
@@ -181,6 +336,7 @@ function onMouseMove(event: MouseEvent): void {
 // Update preview shape position
 function updatePreviewShape(position?: Position3D): void {
   const pos = position || previewPosition;
+  console.log(`🔄 Updating preview shape: ${selectedShape} ${selectedColor} at (${pos.x}, ${pos.y}, ${pos.z})`);
 
   if (previewShape) {
     scene.remove(previewShape);
@@ -191,18 +347,18 @@ function updatePreviewShape(position?: Position3D): void {
 
   // Create preview shape with visual feedback
   previewShape = createShape(selectedShape, selectedColor, pos, true);
+  console.log(`✨ Created preview shape with color: ${selectedColor}`);
 
   // Change preview material based on validity
   const material = previewShape.material as THREE.MeshLambertMaterial;
   if (validation.valid) {
-    // Valid placement - show in selected color with green tint
-    material.opacity = 0.7;
-    material.emissive = new THREE.Color(0x004400); // Green glow
+    // Valid placement - show in selected color with very subtle green tint
+    material.opacity = 0.8;
+    material.emissive = new THREE.Color(0x001100); // Very subtle green glow
   } else {
-    // Invalid placement - show in red
-    material.color = new THREE.Color(0xff0000); // Red color
-    material.opacity = 0.5;
-    material.emissive = new THREE.Color(0x440000); // Red glow
+    // Invalid placement - show in selected color with very subtle red tint
+    material.opacity = 0.6;
+    material.emissive = new THREE.Color(0x110000); // Very subtle red glow
   }
 
   scene.add(previewShape);
@@ -239,26 +395,105 @@ function movePreview(direction: 'up' | 'down' | 'left' | 'right' | 'higher' | 'l
 }
 
 // Camera perspective controls
-function setCameraPerspective(angle: 'top' | 'front' | 'side' | 'iso'): void {
-  switch (angle) {
-    case 'top':
-      cameraAngleX = Math.PI / 2 - 0.1;
-      cameraAngleY = 0;
+// Camera rotation functions
+function rotateCamera(direction: 'horizontal' | 'up' | 'down'): void {
+  if (isAnimatingCamera) {
+    console.log(`🎥 Camera is already animating, ignoring ${direction} rotation`);
+    return;
+  }
+
+  console.log(`🎥 Rotating camera: ${direction}`);
+
+  let newAngleX = cameraAngleX;
+  let newAngleY = cameraAngleY;
+
+  switch (direction) {
+    case 'horizontal':
+      // Rotate 90 degrees to the right around Y axis
+      newAngleY = cameraAngleY + Math.PI / 2;
       break;
-    case 'front':
-      cameraAngleX = 0;
-      cameraAngleY = 0;
+    case 'up':
+      // Look up by 30 degrees, but clamp to prevent going too high
+      newAngleX = Math.min(Math.PI / 2 - 0.1, cameraAngleX + Math.PI / 6);
       break;
-    case 'side':
-      cameraAngleX = 0;
-      cameraAngleY = Math.PI / 2;
-      break;
-    case 'iso':
-      cameraAngleX = Math.PI / 6;
-      cameraAngleY = Math.PI / 4;
+    case 'down':
+      // Look down by 30 degrees, but clamp to prevent going too low
+      newAngleX = Math.max(-Math.PI / 3, cameraAngleX - Math.PI / 6);
       break;
   }
-  updateCameraPosition();
+
+  // Start smooth animation to new position
+  animateCameraToPosition(newAngleX, newAngleY);
+
+  // Remove active state from reset button when rotating
+  document.querySelectorAll('.camera-btn').forEach(btn => {
+    btn.classList.remove('camera-btn-active');
+  });
+}
+
+function resetCamera(): void {
+  if (isAnimatingCamera) {
+    console.log(`🎥 Camera is already animating, ignoring reset`);
+    return;
+  }
+
+  console.log(`🎥 Resetting camera to isometric view`);
+
+  // Animate to default isometric view
+  animateCameraToPosition(Math.PI / 6, Math.PI / 4);
+
+  // Update active button state
+  document.querySelectorAll('.camera-btn').forEach(btn => {
+    btn.classList.remove('camera-btn-active');
+  });
+
+  // Add active class to reset button
+  const resetButton = Array.from(document.querySelectorAll('.camera-btn')).find(
+    btn => btn.textContent?.trim() === '⌂'
+  );
+
+  if (resetButton) {
+    resetButton.classList.add('camera-btn-active');
+  }
+}
+
+// Keep the old function for backward compatibility but make it use the new system
+function setCameraPerspective(angle: 'top' | 'front' | 'side' | 'iso'): void {
+  if (isAnimatingCamera) {
+    console.log(`🎥 Camera is already animating, ignoring ${angle} perspective change`);
+    return;
+  }
+
+  console.log(`🎥 Camera perspective changed to: ${angle}`);
+
+  let newAngleX: number;
+  let newAngleY: number;
+
+  switch (angle) {
+    case 'top':
+      newAngleX = Math.PI / 2 - 0.1;
+      newAngleY = 0;
+      break;
+    case 'front':
+      newAngleX = 0;
+      newAngleY = 0;
+      break;
+    case 'side':
+      newAngleX = 0;
+      newAngleY = Math.PI / 2;
+      break;
+    case 'iso':
+      resetCamera();
+      return;
+  }
+
+  // Start smooth animation to new position
+  animateCameraToPosition(newAngleX, newAngleY);
+
+  // Remove active state from all camera buttons
+  document.querySelectorAll('.camera-btn').forEach(btn => {
+    btn.classList.remove('camera-btn-active');
+  });
 }
 
 // Handle click (no longer places shapes automatically)
@@ -269,6 +504,7 @@ function onClick(_event: MouseEvent): void {
 // API calls
 async function initGame(): Promise<void> {
   try {
+    console.log('🚀 Initializing game...');
     const response = await fetch('/api/init');
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
@@ -276,35 +512,27 @@ async function initGame(): Promise<void> {
     if (data.type === 'init') {
       username = data.username;
       gameState = data.gameState;
-
-      document.getElementById('title')!.textContent = `Welcome ${username}!`;
       updateGameDisplay();
+
+      // Automatically join the game
+      await joinGame();
+
+
     }
   } catch (err) {
     console.error('Error initializing game:', err);
+    showToast('Failed to initialize game', 'error');
   }
 }
 
 async function joinGame(): Promise<void> {
-  const startBtn = document.getElementById('start-btn') as HTMLButtonElement;
-  const originalText = startBtn.textContent;
-
   try {
-    // Show loading state
-    startBtn.textContent = 'Joining...';
-    startBtn.disabled = true;
-
-    // Add timeout to prevent hanging
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    console.log('🎮 Auto-joining game...');
 
     const response = await fetch('/api/join', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal
+      headers: { 'Content-Type': 'application/json' }
     });
-
-    clearTimeout(timeoutId);
 
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
@@ -322,43 +550,30 @@ async function joinGame(): Promise<void> {
       // Start polling for updates
       startGameUpdates();
 
-      // Hide start screen, show game UI
-      document.getElementById('start-screen')!.style.display = 'none';
-      document.getElementById('toolbox')!.style.display = 'block';
-
       // Setup toolbox event listeners
       setupToolboxEventListeners();
+
+      console.log('✅ Game joined successfully');
     } else {
       throw new Error('Failed to join game');
     }
   } catch (err) {
     console.error('Error joining game:', err);
-
-    // Reset button state
-    startBtn.textContent = originalText;
-    startBtn.disabled = false;
-
-    // Show error message
     showToast('Failed to join game. Please try again.', 'error');
   }
 }
 
-// How to Play modal functions
-function showHowToPlay(): void {
-  document.getElementById('how-to-play-modal')!.style.display = 'block';
-}
 
-function closeHowToPlay(): void {
-  document.getElementById('how-to-play-modal')!.style.display = 'none';
-}
 
-// Start polling for game updates
+
+
+// Start polling for game updates (only for other players' actions)
 function startGameUpdates(): void {
   if (updateInterval) {
-    clearInterval(updateInterval);
+    clearTimeout(updateInterval);
   }
 
-  updateInterval = setInterval(async () => {
+  const pollForUpdates = async () => {
     try {
       const response = await fetch('/api/init');
       if (response.ok) {
@@ -376,16 +591,41 @@ function startGameUpdates(): void {
             });
           }
 
-          lastShapeCount = newGameState.shapes.length;
-          gameState = newGameState;
-          updateGameDisplay();
+          // Check if challenge has changed (new challenge started)
+          const challengeChanged = (
+            (!gameState?.currentChallenge && newGameState.currentChallenge) ||
+            (gameState?.currentChallenge && !newGameState.currentChallenge) ||
+            (gameState?.currentChallenge?.id !== newGameState.currentChallenge?.id)
+          );
+
+          // Update if we detect changes from other players (shapes or challenge)
+          if (newGameState.shapes.length !== gameState?.shapes.length || challengeChanged) {
+            lastShapeCount = newGameState.shapes.length;
+            gameState = newGameState;
+            updateGameDisplay();
+
+            // Show notification when a new challenge starts
+            if (challengeChanged && newGameState.currentChallenge) {
+              showToast('🎯 New challenge started!', 'info');
+            }
+          }
         }
       }
     } catch (err) {
       console.error('Error polling for updates:', err);
     }
-  }, 2000); // Poll every 2 seconds
+
+    // Schedule next poll - simple 3 second interval for other players' updates
+    updateInterval = setTimeout(pollForUpdates, 3000);
+  };
+
+  // Start polling
+  pollForUpdates();
 }
+
+
+
+
 
 async function placeShape(type: ShapeType, color: ShapeColor, position: Position3D): Promise<void> {
   try {
@@ -399,13 +639,56 @@ async function placeShape(type: ShapeType, color: ShapeColor, position: Position
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
     const data = (await response.json()) as PlaceShapeResponse;
+    console.log('Place shape response received:', {
+      success: data.success,
+      hasChallenge: !!data.gameState.currentChallenge,
+      challengeId: data.gameState.currentChallenge?.id,
+      round: data.gameState.currentRound,
+      shapesCount: data.gameState.shapes.length
+    });
+
     if (data.success) {
+      const oldChallengeId = gameState?.currentChallenge?.id;
       gameState = data.gameState;
       updateGameDisplay();
 
       // Show success toast for all users
       if (data.message) {
-        showToast(data.message, 'success');
+        const toastType = data.isFirstPlacement ? 'success' : 'success';
+        showToast(data.message, toastType);
+      }
+
+      // Show special first place bonus notification
+      if (data.isFirstPlacement) {
+        setTimeout(() => {
+          showFirstPlaceBonusNotification();
+        }, 1000);
+      }
+
+      // Check for challenge state changes by comparing challenge IDs
+      const newChallengeId = gameState.currentChallenge?.id;
+
+      console.log('Challenge state check:', {
+        oldChallengeId,
+        newChallengeId,
+        oldHadChallenge: !!oldChallengeId,
+        newHasChallenge: !!newChallengeId
+      });
+
+      if (oldChallengeId && !newChallengeId) {
+        // Challenge was completed and no new one yet
+        console.log('Challenge completed, no new challenge');
+        showToast('Challenge completed!', 'success');
+      } else if (oldChallengeId && newChallengeId && oldChallengeId !== newChallengeId) {
+        // Challenge was completed and new one started
+        console.log('Challenge completed and new one started');
+        showToast('Challenge completed! New challenge started!', 'success');
+      } else if (!oldChallengeId && newChallengeId) {
+        // New challenge started (first challenge or after a gap)
+        console.log('New challenge started');
+        showToast('New challenge started!', 'success');
+      } else {
+        console.log('No challenge state change detected');
       }
     } else {
       // Show error notification for position occupied
@@ -421,10 +704,15 @@ async function placeShape(type: ShapeType, color: ShapeColor, position: Position
 
 // Update game display
 function updateGameDisplay(): void {
-  if (!gameState) return;
+  console.log('updateGameDisplay called');
+  if (!gameState) {
+    console.log('No gameState, returning');
+    return;
+  }
+  console.log('gameState:', gameState);
+  console.log('currentChallenge:', gameState.currentChallenge);
 
-  // Update leaderboard
-  updateLeaderboard();
+
 
   // Clear existing shapes
   placedShapes.forEach(mesh => scene.remove(mesh));
@@ -441,7 +729,16 @@ function updateGameDisplay(): void {
   challengeHighlights.forEach(highlight => scene.remove(highlight));
   challengeHighlights.length = 0;
 
+
+
   if (gameState.currentChallenge) {
+    console.log('Found active challenge, showing challenge card');
+    console.log('Challenge details:', {
+      id: gameState.currentChallenge.id,
+      positions: gameState.currentChallenge.positions,
+      shapes: gameState.currentChallenge.shapes,
+      colors: gameState.currentChallenge.colors
+    });
     gameState.currentChallenge.positions.forEach((pos, index) => {
       // Check if this position already has the correct shape placed
       const requiredShape = gameState?.currentChallenge?.shapes[index];
@@ -491,77 +788,115 @@ function updateGameDisplay(): void {
       }
     });
 
-    // Show challenge info only if game has started
-    if (gameStarted) {
-      document.getElementById('challenge-info')!.style.display = 'block';
-      updateChallengeInfo(gameState.currentChallenge);
+    // Show enhanced challenge info whenever there's an active challenge
+    console.log('Setting challenge-info display to block');
+    const challengeInfoElement = document.getElementById('challenge-info');
+    console.log('challengeInfoElement:', challengeInfoElement);
+    if (challengeInfoElement) {
+      challengeInfoElement.style.display = 'block';
+      console.log('Challenge card should now be visible');
+
+      // Setup help button event listener now that challenge card is visible
+      setupHelpButton();
     }
+    updateChallengeInfo(gameState.currentChallenge);
+
+    // Hide game over display when there's an active challenge
+    document.getElementById('game-over-display')!.style.display = 'none';
   } else {
+    console.log('No active challenge found, hiding challenge card');
     // Hide challenge info when no active challenge
     document.getElementById('challenge-info')!.style.display = 'none';
 
-    // Show brief completion message if we just completed a challenge
+    // Check if game is completed (no active challenge and reached max rounds)
+    if (gameState.currentRound >= gameState.totalRounds) {
+      showGameOverDisplay();
+    } else {
+      // Hide game over display if not completed
+      document.getElementById('game-over-display')!.style.display = 'none';
+    }
+
+    // Show enhanced completion message if we just completed a challenge
     if (challengeHighlights.length > 0) {
+      showEnhancedChallengeCompletion();
       showChallengeCompletionMessage();
     }
   }
 }
 
-// Update challenge info with specific shapes and colors
+// Update enhanced challenge info card
 function updateChallengeInfo(challenge: any): void {
-  const challengeTitle = document.querySelector('.challenge-title') as HTMLElement;
-  const challengeDesc = document.querySelector('.challenge-desc') as HTMLElement;
+  if (!challenge || !gameState) return;
 
-  if (challengeTitle && challengeDesc && challenge && gameState) {
-    // Count completed positions
-    let completedCount = 0;
-    const totalCount = challenge.positions.length;
+  // Count completed positions
+  let completedCount = 0;
+  const totalCount = challenge.positions.length;
 
-    challenge.positions.forEach((pos: Position3D, index: number) => {
-      const requiredShape = challenge.shapes[index];
-      const requiredColor = challenge.colors[index];
+  challenge.positions.forEach((pos: Position3D, index: number) => {
+    const requiredShape = challenge.shapes[index];
+    const requiredColor = challenge.colors[index];
 
-      const isCompleted = gameState!.shapes.some(shape =>
-        shape.position.x === pos.x &&
-        shape.position.y === pos.y &&
-        shape.position.z === pos.z &&
-        shape.type === requiredShape &&
-        shape.color === requiredColor
+    const isCompleted = gameState!.shapes.some(shape =>
+      shape.position.x === pos.x &&
+      shape.position.y === pos.y &&
+      shape.position.z === pos.z &&
+      shape.type === requiredShape &&
+      shape.color === requiredColor
+    );
+
+    if (isCompleted) completedCount++;
+  });
+
+  // Update progress bar
+  const progressFill = document.getElementById('progress-fill') as HTMLElement;
+  const progressText = document.getElementById('progress-text') as HTMLElement;
+
+  if (progressFill && progressText) {
+    const progressPercent = (completedCount / totalCount) * 100;
+    progressFill.style.width = `${progressPercent}%`;
+    progressText.textContent = `${completedCount}/${totalCount} Complete`;
+  }
+
+  // Update requirements list
+  const requirementsList = document.getElementById('requirements-list') as HTMLElement;
+  if (requirementsList) {
+    const requirementItems = challenge.shapes.map((shape: string, index: number) => {
+      const pos = challenge.positions[index];
+      const color = challenge.colors[index];
+
+      const isCompleted = gameState!.shapes.some(s =>
+        s.position.x === pos.x &&
+        s.position.y === pos.y &&
+        s.position.z === pos.z &&
+        s.type === shape &&
+        s.color === color
       );
 
-      if (isCompleted) completedCount++;
-    });
+      const shapeIcon = getShapeIcon(shape);
+      const completedClass = isCompleted ? 'completed' : '';
 
-    challengeTitle.textContent = `Challenge (${completedCount}/${totalCount})`;
+      return `
+        <div class="requirement-item ${completedClass}">
+          <span class="requirement-shape">${shapeIcon}</span>
+          <span class="requirement-color">${color}</span>
+        </div>
+      `;
+    }).join('');
 
-    // Show only remaining requirements
-    const remainingRequirements = challenge.shapes
-      .map((shape: string, index: number) => {
-        const pos = challenge.positions[index];
-        const color = challenge.colors[index];
+    requirementsList.innerHTML = requirementItems;
+  }
 
-        const isCompleted = gameState!.shapes.some(s =>
-          s.position.x === pos.x &&
-          s.position.y === pos.y &&
-          s.position.z === pos.z &&
-          s.type === shape &&
-          s.color === color
-        );
-
-        if (!isCompleted) {
-          const shapeIcon = getShapeIcon(shape);
-          return `${shapeIcon} ${color}`;
-        }
-        return null;
-      })
-      .filter((req: string | null) => req !== null);
-
-    if (remainingRequirements.length > 0) {
-      challengeDesc.textContent = `Place: ${remainingRequirements.join(', ')}`;
+  // Update challenge title
+  const challengeTitle = document.querySelector('.challenge-title') as HTMLElement;
+  if (challengeTitle) {
+    if (completedCount === totalCount) {
+      challengeTitle.textContent = 'Challenge Complete! 🎉';
     } else {
-      challengeDesc.textContent = 'Challenge Complete!';
+      challengeTitle.textContent = `Challenge Active! (${completedCount}/${totalCount})`;
     }
   }
+
+  // No timer needed - challenges run until completed
 }
 
 // Get shape icon for display
@@ -574,6 +909,35 @@ function getShapeIcon(shapeType: string): string {
   }
 }
 
+// Timer display removed - challenges no longer have timeouts
+
+// Enhanced challenge completion with card animation
+function showEnhancedChallengeCompletion(): void {
+  const challengeCard = document.getElementById('challenge-info') as HTMLElement;
+  if (challengeCard) {
+    // Add completion animation
+    challengeCard.style.animation = 'challengeComplete 1s ease-out';
+
+    // Update card content for completion
+    const challengeTitle = document.querySelector('.challenge-title') as HTMLElement;
+    const statusIndicator = document.querySelector('.status-indicator') as HTMLElement;
+
+    if (challengeTitle) {
+      challengeTitle.textContent = 'Challenge Complete! 🎉';
+    }
+
+    if (statusIndicator) {
+      statusIndicator.style.background = '#4caf50';
+      statusIndicator.style.animation = 'completionGlow 0.5s ease-in-out infinite';
+    }
+
+    // Reset animation after completion
+    setTimeout(() => {
+      challengeCard.style.animation = 'challengeCardPulse 2s ease-in-out infinite';
+    }, 1000);
+  }
+}
+
 
 
 // Show challenge completion feedback
@@ -583,7 +947,7 @@ function showChallengeCompletionMessage(): void {
   completionMsg.innerHTML = `
     <div class="completion-icon">🎉</div>
     <div class="completion-text">Challenge Completed!</div>
-    <div class="completion-subtext">Next challenge in 30 seconds</div>
+    <div class="completion-subtext">Next challenge starting soon...</div>
   `;
 
   document.body.appendChild(completionMsg);
@@ -596,12 +960,272 @@ function showChallengeCompletionMessage(): void {
   }, 3000);
 }
 
+// Show first place bonus notification
+function showFirstPlaceBonusNotification(): void {
+  const bonusMsg = document.createElement('div');
+  bonusMsg.className = 'first-place-bonus';
+  bonusMsg.innerHTML = `
+    <div class="bonus-icon">🥇</div>
+    <div class="bonus-text">FIRST PLACE!</div>
+    <div class="bonus-subtext">+1 Bonus Point for being first in this round!</div>
+  `;
+
+  document.body.appendChild(bonusMsg);
+
+  // Remove message after 4 seconds
+  setTimeout(() => {
+    if (bonusMsg.parentNode) {
+      bonusMsg.parentNode.removeChild(bonusMsg);
+    }
+  }, 4000);
+}
+
+// Show game over display with leaderboard
+function showGameOverDisplay(): void {
+  const gameOverDisplay = document.getElementById('game-over-display');
+  const gameOverStats = document.getElementById('game-over-stats');
+  const leaderboardList = document.getElementById('game-over-leaderboard-list');
+
+  if (!gameOverDisplay || !gameOverStats || !leaderboardList || !gameState) return;
+
+  // Calculate game statistics
+  const totalShapes = gameState.shapes.length;
+  const playerCount = gameState.players.length;
+  const totalRounds = gameState.totalRounds;
+
+  // Update leaderboard display
+  if (gameState.leaderboard.length > 0) {
+    const leaderboardHTML = gameState.leaderboard.slice(0, 10).map((player, index) => {
+      const rank = index + 1;
+      let rankClass = '';
+      let medal = '';
+
+      if (rank === 1) {
+        rankClass = 'first-place';
+        medal = '🥇';
+      } else if (rank === 2) {
+        rankClass = 'second-place';
+        medal = '🥈';
+      } else if (rank === 3) {
+        rankClass = 'third-place';
+        medal = '🥉';
+      } else {
+        medal = `${rank}.`;
+      }
+
+      return `
+        <div class="leaderboard-entry ${rankClass}">
+          <div class="leaderboard-rank">
+            <span class="rank-medal">${medal}</span>
+          </div>
+          <div class="leaderboard-player">${player.playerId}</div>
+          <div class="leaderboard-score">${player.score} pts</div>
+        </div>
+      `;
+    }).join('');
+
+    leaderboardList.innerHTML = leaderboardHTML;
+  } else {
+    leaderboardList.innerHTML = '<div class="no-players">No players scored points</div>';
+  }
+
+  // Update stats content
+  gameOverStats.innerHTML = `
+    <div>🏗️ Total shapes placed: ${totalShapes}</div>
+    <div>👥 Players participated: ${playerCount}</div>
+    <div>🎯 Rounds completed: ${totalRounds}</div>
+  `;
+
+  // Show the display
+  gameOverDisplay.style.display = 'block';
+
+  // Setup explore button event listener
+  setTimeout(() => {
+    setupExploreButton();
+  }, 100);
+
+  console.log('Game over display with leaderboard shown');
+}
+
+// Close game over display
+function closeGameOverDisplay(): void {
+  console.log('closeGameOverDisplay called');
+  const gameOverDisplay = document.getElementById('game-over-display');
+  console.log('Game over display element:', gameOverDisplay);
+  if (gameOverDisplay) {
+    console.log('Current display style:', gameOverDisplay.style.display);
+    gameOverDisplay.style.display = 'none';
+    console.log('Game over display closed - display set to none');
+  } else {
+    console.error('Game over display element not found!');
+  }
+}
+
+// Setup explore button and close button event listeners
+function setupExploreButton(): void {
+  // Setup explore button
+  const exploreBtn = document.getElementById('explore-button');
+  if (exploreBtn) {
+    // Remove any existing listeners
+    exploreBtn.removeEventListener('click', closeGameOverDisplay);
+
+    // Add the event listener
+    exploreBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      console.log('Explore button clicked!');
+      closeGameOverDisplay();
+    });
+
+    console.log('Explore button event listener added');
+
+    // Visual debugging - make sure it's clickable
+    exploreBtn.style.cursor = 'pointer';
+  } else {
+    console.error('Explore button not found when trying to set up event listener');
+  }
+
+  // Setup close button (×)
+  const closeBtn = document.getElementById('game-over-close-button');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      console.log('Game over close button clicked!');
+      closeGameOverDisplay();
+    });
+    console.log('Game over close button event listener added');
+  } else {
+    console.error('Game over close button not found');
+  }
+
+  // Click outside to close
+  const gameOverModal = document.getElementById('game-over-display');
+  if (gameOverModal) {
+    gameOverModal.addEventListener('click', (event) => {
+      if (event.target === gameOverModal) {
+        console.log('Clicked outside game over modal');
+        closeGameOverDisplay();
+      }
+    });
+    console.log('Game over modal backdrop click listener added');
+  }
+}
+
+// Make closeGameOverDisplay globally accessible immediately
+(window as any).closeGameOverDisplay = closeGameOverDisplay;
+
+// Open help modal
+function openHelpModal(): void {
+  console.log('openHelpModal called');
+  const helpModal = document.getElementById('help-modal');
+  console.log('Help modal element:', helpModal);
+  if (helpModal) {
+    helpModal.style.display = 'flex';
+    console.log('Help modal opened - display set to flex');
+
+    // Setup close button event listeners when modal is opened
+    setTimeout(() => {
+      setupHelpModalCloseButtons();
+    }, 100);
+  } else {
+    console.error('Help modal element not found!');
+  }
+}
+
+// Close help modal
+function closeHelpModal(): void {
+  console.log('closeHelpModal called');
+  const helpModal = document.getElementById('help-modal');
+  console.log('Help modal element found:', !!helpModal);
+  if (helpModal) {
+    console.log('Current display style:', helpModal.style.display);
+    helpModal.style.display = 'none';
+    console.log('Help modal closed - display set to none');
+  } else {
+    console.error('Help modal element not found when trying to close!');
+  }
+}
+
+// Make functions globally accessible immediately
+(window as any).openHelpModal = openHelpModal;
+(window as any).closeHelpModal = closeHelpModal;
+
+// Setup help button event listener
+function setupHelpButton(): void {
+  const helpBtn = document.getElementById('help-button');
+  if (helpBtn) {
+    // Remove any existing listeners
+    helpBtn.removeEventListener('click', openHelpModal);
+
+    // Add the event listener
+    helpBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      console.log('Help button clicked!');
+      openHelpModal();
+    });
+
+    console.log('Help button event listener added');
+
+    // Visual debugging - make sure it's clickable
+    helpBtn.style.cursor = 'pointer';
+    helpBtn.style.border = '1px solid blue'; // Temporary debug border
+  } else {
+    console.error('Help button not found when trying to set up event listener');
+  }
+}
+
+// Setup help modal close button event listeners
+function setupHelpModalCloseButtons(): void {
+  // Close button (×)
+  const closeBtn = document.getElementById('help-close-button');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      console.log('Help close button clicked!');
+      closeHelpModal();
+    });
+    console.log('Help close button event listener added');
+  }
+
+  // Got it button
+  const gotItBtn = document.getElementById('help-got-it-button');
+  if (gotItBtn) {
+    gotItBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      console.log('Got it button clicked!');
+      closeHelpModal();
+    });
+    console.log('Help got it button event listener added');
+  }
+
+  // Click outside to close
+  const helpModal = document.getElementById('help-modal');
+  if (helpModal) {
+    helpModal.addEventListener('click', (event) => {
+      if (event.target === helpModal) {
+        console.log('Clicked outside help modal');
+        closeHelpModal();
+      }
+    });
+    console.log('Help modal backdrop click listener added');
+  }
+}
+
+// Make functions globally accessible
+(window as any).closeGameOverDisplay = closeGameOverDisplay;
+(window as any).openHelpModal = openHelpModal;
+(window as any).closeHelpModal = closeHelpModal;
+
 // Show toast notification
 function showToast(message: string, type: 'success' | 'error' | 'info' = 'info'): void {
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
 
-  const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️';
+  const icon = type === 'success' ? '' : type === 'error' ? '' : 'ℹ';
   toast.innerHTML = `
     <div class="toast-icon">${icon}</div>
     <div class="toast-message">${message}</div>
@@ -659,6 +1283,10 @@ function setupToolbox(): void {
       document.querySelectorAll('#shape-buttons button').forEach(b => b.className = '');
       btn.className = 'selected';
       updatePlaceButtonText();
+      // Update preview shape with new shape type
+      if (gameStarted && isPreviewMode) {
+        updatePreviewShape();
+      }
     };
     shapeButtons.appendChild(btn);
   });
@@ -672,6 +1300,11 @@ function setupToolbox(): void {
       selectedColor = color;
       document.querySelectorAll('#color-buttons-1 button, #color-buttons-2 button').forEach(b => b.className = '');
       btn.className = 'selected';
+      // Update preview shape with new color
+      if (gameStarted && isPreviewMode) {
+        console.log(`🎨 Color changed to ${color}, updating preview`);
+        updatePreviewShape();
+      }
     };
     colorButtons1.appendChild(btn);
   });
@@ -685,6 +1318,11 @@ function setupToolbox(): void {
       selectedColor = color;
       document.querySelectorAll('#color-buttons-1 button, #color-buttons-2 button').forEach(b => b.className = '');
       btn.className = 'selected';
+      // Update preview shape with new color
+      if (gameStarted && isPreviewMode) {
+        console.log(`🎨 Color changed to ${color}, updating preview`);
+        updatePreviewShape();
+      }
     };
     colorButtons2.appendChild(btn);
   });
@@ -823,7 +1461,7 @@ window.addEventListener('mouseup', () => {
 // Cleanup on page unload
 window.addEventListener('beforeunload', () => {
   if (updateInterval) {
-    clearInterval(updateInterval);
+    clearTimeout(updateInterval);
   }
 });
 
@@ -887,11 +1525,27 @@ window.addEventListener('keydown', (event) => {
   }
 });
 
-document.getElementById('start-btn')!.addEventListener('click', joinGame);
-document.getElementById('how-to-play-btn')!.addEventListener('click', showHowToPlay);
+// Global keyboard shortcuts (work even when game not started)
+window.addEventListener('keydown', (event) => {
+  switch (event.key) {
+    case 'Escape':
+      // Close help modal if open
+      const helpModal = document.getElementById('help-modal');
+      if (helpModal && helpModal.style.display === 'flex') {
+        closeHelpModal();
+        event.preventDefault();
+      }
+      // Close game over display if open
+      const gameOverDisplay = document.getElementById('game-over-display');
+      if (gameOverDisplay && gameOverDisplay.style.display === 'block') {
+        closeGameOverDisplay();
+        event.preventDefault();
+      }
+      break;
+  }
+});
 
-// Setup modal buttons immediately on page load
-setupModalButtons();
+
 
 // Add event listener for toolbox toggle when the game starts
 function setupToolboxEventListeners(): void {
@@ -910,11 +1564,28 @@ function setupToolboxEventListeners(): void {
     console.error('Toolbox toggle button not found!');
   }
 
+  // Setup help button event listener
+  const helpBtn = document.getElementById('help-button');
+  if (helpBtn) {
+    helpBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      console.log('Help button clicked!');
+      openHelpModal();
+    });
+    console.log('Help button event listener added');
+
+    // Make sure it's clickable
+    helpBtn.style.cursor = 'pointer';
+    helpBtn.style.border = '1px solid blue'; // Temporary debug border
+  } else {
+    console.log('Help button not found - will try again later');
+  }
+
   // Add event listeners for movement buttons (only once)
   setTimeout(() => {
     setupMovementButtons();
     setupPlaceButton();
-    setupModalButtons();
   }, 100);
 }
 
@@ -933,35 +1604,7 @@ function setupPlaceButton(): void {
   }
 }
 
-// Setup modal button event listeners as backup
-function setupModalButtons(): void {
-  // Close button for how to play modal
-  const closeBtn = document.querySelector('.close');
-  if (closeBtn) {
-    // Remove any existing onclick to avoid conflicts
-    closeBtn.removeAttribute('onclick');
-    closeBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      console.log('Close button clicked via event listener');
-      closeHowToPlay();
-    });
-    console.log('Close button event listener added');
-  } else {
-    console.error('Close button not found!');
-  }
 
-  // Also close modal when clicking outside of it
-  const modal = document.getElementById('how-to-play-modal');
-  if (modal) {
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) {
-        closeHowToPlay();
-      }
-    });
-    console.log('Modal background click listener added');
-  }
-}
 
 // Setup movement button event listeners with both click and long press
 function setupMovementButtons(): void {
@@ -1050,45 +1693,72 @@ function getDirectionFromButton(button: HTMLButtonElement): 'up' | 'down' | 'lef
 // Animation loop
 function animate(): void {
   requestAnimationFrame(animate);
+
+  // Update camera animation
+  updateCameraAnimation();
+
+  // Animate arena background shapes if they exist
+  if ((window as any).animateArenaShapes) {
+    (window as any).animateArenaShapes();
+  }
+
   renderer.render(scene, camera);
 }
+
+
 
 // Make functions globally accessible for HTML onclick handlers
 (window as any).movePreview = movePreview;
 (window as any).setCameraPerspective = setCameraPerspective;
-(window as any).showHowToPlay = showHowToPlay;
-(window as any).closeHowToPlay = closeHowToPlay;
+(window as any).rotateCamera = rotateCamera;
+(window as any).resetCamera = resetCamera;
 (window as any).toggleToolboxContent = toggleToolboxContent;
 (window as any).placeCurrentShape = placeCurrentShape;
 
-// Update leaderboard display
-function updateLeaderboard(): void {
-  if (!gameState) return;
 
-  const leaderboardList = document.getElementById('leaderboard-list');
-  if (!leaderboardList) return;
 
-  if (gameState.leaderboard.length === 0) {
-    leaderboardList.innerHTML = '<div class="leaderboard-empty">No scores yet - be the first to complete a challenge!</div>';
-    return;
-  }
+// Setup camera control event listeners as backup
+function setupCameraControls(): void {
+  console.log('🎥 Setting up camera controls...');
 
-  leaderboardList.innerHTML = gameState.leaderboard
-    .slice(0, 10) // Show top 10 players
-    .map((player, index) => {
-      const isCurrentUser = player.playerId === username;
-      return `
-        <div class="leaderboard-entry ${isCurrentUser ? 'current-user' : ''}">
-          <span class="leaderboard-rank">#${index + 1}</span>
-          <span class="leaderboard-name">${player.playerId}</span>
-          <span class="leaderboard-score">${player.score}</span>
-        </div>
-      `;
-    })
-    .join('');
+  // Find all camera buttons and add event listeners
+  const cameraButtons = document.querySelectorAll('.camera-btn');
+  console.log(`Found ${cameraButtons.length} camera buttons`);
+
+  cameraButtons.forEach((button, index) => {
+    const buttonText = button.textContent?.trim();
+
+    // Add click event listener as backup
+    button.addEventListener('click', (e) => {
+      e.preventDefault();
+      console.log(`🎥 Camera button clicked: ${buttonText}`);
+
+      switch (buttonText) {
+        case '↻':
+          rotateCamera('horizontal');
+          break;
+        case '↑':
+          rotateCamera('up');
+          break;
+        case '↓':
+          rotateCamera('down');
+          break;
+        case '⌂':
+          resetCamera();
+          break;
+        default:
+          console.warn(`Unknown camera button: ${buttonText}`);
+      }
+    });
+
+    console.log(`✅ Added event listener for ${buttonText} button`);
+  });
 }
 
 // Initialize
 void initGame();
 setupToolbox();
 animate();
+
+// Setup camera controls after a short delay to ensure DOM is ready
+setTimeout(setupCameraControls, 500);

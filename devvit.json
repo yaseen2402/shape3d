@@ -1,6 +1,6 @@
 {
-  "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
   "name": "shape3d",
+  "version": "1.0.0",
   "post": {
     "dir": "dist/client",
     "entrypoints": {
@@ -19,8 +19,8 @@
   "menu": {
     "items": [
       {
-        "label": "Create a new post",
-        "description": "shape3d",
+        "label": "Create Shape3D Game",
+        "description": "Create a new Shape3D collaborative building game",
         "location": "subreddit",
         "forUserType": "moderator",
         "endpoint": "/internal/menu/post-create"

@@ -1,131 +1,213 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <link rel="stylesheet" type="text/css" href="index.css" />
-    <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, width=device-width, height=device-height, user-scalable=0"
-    />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="full-screen" content="yes" />
-    <meta name="x5-fullscreen" content="true" />
-    <meta name="360-fullscreen" content="true" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  </head>
-  <body>
-    <canvas id="bg"></canvas>
-    
-    <!-- Game UI Overlay -->
-    <div class="game-ui">
-      <!-- Start Screen -->
-      <div id="start-screen" class="start-screen">
-        <h1 id="title">Shape3D</h1>
-        <p class="game-description">Multiplayer 3D Building Game</p>
-        
-        <!-- Leaderboard -->
-        <div id="leaderboard" class="leaderboard">
-          <h3>🏆 Leaderboard</h3>
-          <div id="leaderboard-list" class="leaderboard-list">
-            <div class="leaderboard-empty">No scores yet - be the first to complete a challenge!</div>
-          </div>
+
+<head>
+  <link rel="stylesheet" type="text/css" href="index.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+    content="initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, width=device-width, height=device-height, user-scalable=0" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="full-screen" content="yes" />
+  <meta name="x5-fullscreen" content="true" />
+  <meta name="360-fullscreen" content="true" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+</head>
+
+<body>
+  <canvas id="bg"></canvas>
+
+  <!-- Game UI Overlay -->
+  <div class="game-ui">
+
+
+    <!-- Enhanced Challenge Info Card -->
+    <div id="challenge-info" class="challenge-card" style="display: none;">
+      <div class="challenge-header">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progress-fill"></div>
         </div>
-        
-        <div class="start-controls">
-          <button id="start-btn" class="start-button">Start Game</button>
-          <button id="how-to-play-btn" class="how-to-play-button">How to Play</button>
+        <span class="progress-text" id="progress-text">0/5 Complete</span>
+        <button id="help-button" class="help-button" onclick="window.openHelpModal && window.openHelpModal()"
+          title="How to Play">?</button>
+        <div class="requirements-list" id="requirements-list">
+          <!-- Dynamic content will be inserted here -->
+        </div>
+        <div class="challenge-status" id="challenge-status">
+          <span class="status-indicator"></span>
         </div>
       </div>
+    </div>
 
-      <!-- How to Play Modal -->
-      <div id="how-to-play-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-          <span class="close" onclick="closeHowToPlay()">&times;</span>
-          <h2>How to Play Shape3D</h2>
-          <div class="guide-section">
-            <h3>🎯 Objective</h3>
-            <p>Build in a shared 3D space and compete in timed challenges!</p>
+    <!-- Game Over Display -->
+    <div id="game-over-display" class="game-over-display" style="display: none;">
+      <div class="game-over-content">
+        <button id="game-over-close-button" class="close-button"
+          onclick="window.closeGameOverDisplay && window.closeGameOverDisplay()">×</button>
+        <div class="game-over-title">🎉 GAME COMPLETE! 🎉</div>
+
+        <!-- Leaderboard Section -->
+        <div class="game-over-leaderboard">
+          <div class="leaderboard-header">
+            <div class="leaderboard-title">🏆 Final Leaderboard</div>
           </div>
-          <div class="guide-section">
+          <div class="leaderboard-list" id="game-over-leaderboard-list">
+            <!-- Dynamic leaderboard content will be inserted here -->
+          </div>
+        </div>
+
+        <!-- Game Stats -->
+        <div class="game-over-stats" id="game-over-stats">
+          <!-- Dynamic content will be inserted here -->
+        </div>
+
+        <div class="game-over-actions">
+          <button id="explore-button" class="explore-button"
+            onclick="window.closeGameOverDisplay && window.closeGameOverDisplay()">Explore 3D Scene</button>
+        </div>
+      </div>
+    </div>
+
+
+
+    <!-- Countdown Display -->
+    <div id="countdown-display" class="countdown-display" style="display: none;">
+      <div class="countdown-content">
+        <div class="countdown-title">Next Challenge In</div>
+        <div class="countdown-timer" id="countdown-timer">30</div>
+        <div class="countdown-subtitle">seconds</div>
+      </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div id="help-modal" class="help-modal" style="display: none;">
+      <div class="help-modal-content">
+        <div class="help-header">
+          <h2 class="help-title">📖 How to Play Shape3D</h2>
+          <button id="help-close-button" class="close-button"
+            onclick="window.closeHelpModal && window.closeHelpModal()">×</button>
+        </div>
+
+        <div class="help-content">
+          <div class="help-section">
+            <h3>🎯 Objective</h3>
+            <p>Complete collaborative challenges by placing the correct shapes in highlighted positions!</p>
+          </div>
+
+          <div class="help-section">
             <h3>🎮 Controls</h3>
+            <div class="controls-grid">
+              <div class="control-item">
+                <span class="control-key">WASD</span>
+                <span class="control-desc">Move preview shape</span>
+              </div>
+              <div class="control-item">
+                <span class="control-key">▲▼</span>
+                <span class="control-desc">Change height</span>
+              </div>
+              <div class="control-item">
+                <span class="control-key">SPACE</span>
+                <span class="control-desc">Place shape</span>
+              </div>
+              <div class="control-item">
+                <span class="control-key">Mouse</span>
+                <span class="control-desc">Rotate camera</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="help-section">
+            <h3>🏆 Scoring</h3>
             <ul>
-              <li><strong>WASD/Arrow Keys:</strong> Move preview cube horizontally</li>
-              <li><strong>Q/E/Up/Down Arrows:</strong> Move preview cube up/down</li>
-              <li><strong>Space:</strong> Place shape at preview position</li>
-              <li><strong>Mouse Drag:</strong> Rotate camera view</li>
-              <li><strong>Arrow Buttons:</strong> Mobile movement controls</li>
+              <li>Place shapes in <span class="highlight">yellow highlighted</span> challenge positions</li>
+              <li>Match the required <span class="highlight">shape type</span> and <span class="highlight">color</span>
+              </li>
+              <li>Earn points for each correct placement</li>
+              <li>Race other players to complete challenges first!</li>
             </ul>
           </div>
-          <div class="guide-section">
-            <h3>⚡ Challenges</h3>
-            <p>Every 30 seconds, yellow highlights appear showing where to place specific shapes and colors. Race other players to complete them first!</p>
+
+          <div class="help-section">
+            <h3>🎲 Game Flow</h3>
+            <ul>
+              <li>5 rounds of challenges</li>
+              <li>Each challenge has 3 positions to fill</li>
+              <li>Challenges complete when all positions are filled correctly</li>
+              <li>New challenges start immediately after completion</li>
+            </ul>
           </div>
-          <div class="guide-section">
-            <h3>🔧 Building</h3>
-            <p>Choose shapes (cube, triangle, sphere) and colors from the toolbox. Build up to 10 levels high on the 20x20 grid!</p>
-          </div>
+        </div>
+
+        <div class="help-footer">
+          <button id="help-got-it-button" class="got-it-button"
+            onclick="window.closeHelpModal && window.closeHelpModal()">Got it! Let's Play 🚀</button>
         </div>
       </div>
-      
-      <!-- Top Left Challenge Info -->
-      <div id="challenge-info" class="challenge-info-small" style="display: none;">
-        <div class="challenge-icon">⚡</div>
-        <div class="challenge-text">
-          <span class="challenge-title">Challenge Active!</span>
-          <span class="challenge-round">Round 1 of 5</span>
-          <span class="challenge-desc">Place highlighted shapes</span>
-        </div>
+    </div>
+
+
+
+    <!-- Camera View Controls - Bottom Right -->
+    <div id="camera-controls" class="camera-controls">
+      <div class="camera-controls-header">
+        <span class="camera-label">View</span>
       </div>
-      
-      <!-- Bottom Left Toolbox -->
-      <div id="toolbox" class="toolbox-left" style="display: none;">
-        <div class="toolbox-header">
-          <button id="place-btn" class="place-button" onclick="placeCurrentShape()">Place Shape</button>
-          <button id="toolbox-toggle" class="toolbox-toggle">▼</button>
+      <div class="camera-buttons">
+        <button class="camera-btn" onclick="rotateCamera('horizontal')" title="Rotate Horizontally">↻</button>
+        <button class="camera-btn" onclick="rotateCamera('up')" title="Look Up">↑</button>
+        <button class="camera-btn" onclick="rotateCamera('down')" title="Look Down">↓</button>
+        <button class="camera-btn camera-btn-active" onclick="resetCamera()" title="Reset to Isometric">⌂</button>
+      </div>
+    </div>
+
+    <!-- Bottom Left Toolbox -->
+    <div id="toolbox" class="toolbox-left">
+      <div class="toolbox-header">
+        <button id="place-btn" class="place-button" onclick="placeCurrentShape()">Place Shape</button>
+        <button id="toolbox-toggle" class="toolbox-toggle">▼</button>
+      </div>
+
+      <div id="toolbox-content" class="toolbox-content">
+        <!-- Row 1: Shapes -->
+        <div class="tool-row">
+          <div id="shape-buttons" class="button-row"></div>
         </div>
-        
-        <div id="toolbox-content" class="toolbox-content">
-          <!-- Row 1: Shapes -->
-          <div class="tool-row">
-            <div id="shape-buttons" class="button-row"></div>
-          </div>
-          
-          <!-- Row 2: First 3 Colors -->
-          <div class="tool-row">
-            <div id="color-buttons-1" class="button-row"></div>
-          </div>
-          
-          <!-- Row 3: Last 3 Colors -->
-          <div class="tool-row">
-            <div id="color-buttons-2" class="button-row"></div>
-          </div>
-          
-          <!-- Row 4: Movement Controls -->
-          <div class="tool-row mobile-controls">
-            <div class="movement-grid">
-              <!-- Column 1: Forward/Back -->
-              <div class="move-column">
-                <button class="move-btn">↑</button>
-                <button class="move-btn">↓</button>
-              </div>
-              <!-- Column 2: Left/Right -->
-              <div class="move-column">
-                <button class="move-btn">←</button>
-                <button class="move-btn">→</button>
-              </div>
-              <!-- Column 3: Up/Down (Height) -->
-              <div class="move-column">
-                <button class="move-btn">▲</button>
-                <button class="move-btn">▼</button>
-              </div>
+
+        <!-- Row 2: First 3 Colors -->
+        <div class="tool-row">
+          <div id="color-buttons-1" class="button-row"></div>
+        </div>
+
+        <!-- Row 3: Last 3 Colors -->
+        <div class="tool-row">
+          <div id="color-buttons-2" class="button-row"></div>
+        </div>
+
+        <!-- Row 4: Movement Controls -->
+        <div class="tool-row mobile-controls">
+          <div class="movement-grid">
+            <!-- Column 1: Forward/Back -->
+            <div class="move-column">
+              <button class="move-btn">↑</button>
+              <button class="move-btn">↓</button>
+            </div>
+            <!-- Column 2: Left/Right -->
+            <div class="move-column">
+              <button class="move-btn">←</button>
+              <button class="move-btn">→</button>
+            </div>
+            <!-- Column 3: Up/Down (Height) -->
+            <div class="move-column">
+              <button class="move-btn">▲</button>
+              <button class="move-btn">▼</button>
             </div>
           </div>
         </div>
       </div>
-      
-
     </div>
-    
-    <script type="module" src="main.ts" defer></script>
-  </body>
+
+  </div>
+
+  <script type="module" src="main.ts" defer></script>
+</body>
+
 </html>

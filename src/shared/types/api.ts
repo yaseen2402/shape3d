@@ -40,6 +40,8 @@ export type GameState = {
   currentRound: number;
   totalRounds: number;
   isActive: boolean;
+  nextChallengeStartTime?: number; // timestamp when next challenge will start
+  countdownActive?: boolean; // whether countdown is currently active
 };
 
 // API Response Types
@@ -63,6 +65,7 @@ export type PlaceShapeResponse = {
   gameState: GameState;
   message?: string;
   playerName?: string;
+  isFirstPlacement?: boolean;
 };
 
 export type GameUpdateResponse = {

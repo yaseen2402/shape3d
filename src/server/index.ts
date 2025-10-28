@@ -24,9 +24,7 @@ app.use(express.text());
 const router = express.Router();
 
 // Game constants
-const CHALLENGE_DURATION = 30000; // 30 seconds
-const CHALLENGE_INTERVAL = 30000; // Every 30 seconds
-const CHALLENGE_COMPLETION_DELAY = 30000; // 30 seconds after completion
+
 const TOTAL_ROUNDS = 5; // Total number of challenge rounds
 const GRID_SIZE = 20;
 
@@ -35,7 +33,93 @@ const challengeTimers = new Map<string, NodeJS.Timeout>();
 
 // Helper functions
 function generateId(): string {
-  return Math.random().toString(36).substr(2, 9);
+  return Math.random().toString(36).substring(2, 11);
+}
+
+// Game initialization moved to gameInit.ts to avoid circular imports
+
+function checkChallengeCompletion(gameState: GameState): boolean {
+  if (!gameState.currentChallenge) return false;
+  
+  const challenge = gameState.currentChallenge;
+  
+  // Check if all challenge positions are filled with correct shapes and colors
+  for (let i = 0; i < challenge.positions.length; i++) {
+    const requiredPos = challenge.positions[i];
+    const requiredShape = challenge.shapes[i];
+    const requiredColor = challenge.colors[i];
+    
+    if (!requiredPos || !requiredShape || !requiredColor) {
+      return false; // Invalid challenge data
+    }
+    
+    // Find if there's a shape at this position with correct type and color
+    const matchingShape = gameState.shapes.find(shape => 
+      shape.position.x === requiredPos.x &&
+      shape.position.y === requiredPos.y &&
+      shape.position.z === requiredPos.z &&
+      shape.type === requiredShape &&
+      shape.color === requiredColor
+    );
+    
+    if (!matchingShape) {
+      return false; // Challenge not complete
+    }
+  }
+  
+  return true; // All positions filled correctly
+}
+
+async function completeChallengeAndScheduleNext(postId: string): Promise<Challenge | null> {
+  console.log(`🎉 Challenge completed for post ${postId}! Starting next challenge immediately...`);
+  
+  // Clear current challenge
+  await redis.del(`game:${postId}:challenge`);
+  
+  // Small delay to ensure Redis operations complete
+  await new Promise(resolve => setTimeout(resolve, 100));
+  
+  // Check if there are more rounds before creating next challenge
+  const gameState = await getGameState(postId);
+  console.log(`📊 Current game state for ${postId}: Round ${gameState.currentRound}/${TOTAL_ROUNDS}`);
+  
+  if (gameState.currentRound < TOTAL_ROUNDS) {
+    console.log(`🚀 Creating next challenge immediately for post ${postId}`);
+    
+    // Clear any existing timer first
+    if (challengeTimers.has(postId)) {
+      console.log(`🧹 Clearing existing timer for post ${postId}`);
+      clearTimeout(challengeTimers.get(postId)!);
+      challengeTimers.delete(postId);
+    }
+    
+    // Clear any countdown state
+    await Promise.all([
+      redis.del(`game:${postId}:nextChallengeTime`),
+      redis.del(`game:${postId}:countdownActive`)
+    ]);
+    
+    try {
+      // Create next challenge immediately
+      const newChallenge = await createChallenge(postId);
+      if (newChallenge) {
+        console.log(`✅ New challenge created successfully for post ${postId}:`, {
+          challengeId: newChallenge.id,
+          round: (await getGameState(postId)).currentRound
+        });
+        return newChallenge;
+      } else {
+        console.log(`❌ Failed to create new challenge for post ${postId} - game may be complete`);
+        return null;
+      }
+    } catch (error) {
+      console.error(`💥 Error creating next challenge for post ${postId}:`, error);
+      return null;
+    }
+  } else {
+    console.log(`🏁 Game ${postId} completed all ${TOTAL_ROUNDS} rounds`);
+    return null;
+  }
 }
 
 function getRandomPosition(): Position3D {
@@ -60,15 +144,19 @@ function getRandomColor(): ShapeColor {
 // Data Storage: Using Redis (available in Devvit 0.12.1)
 // Note: In newer Devvit versions, consider migrating to the built-in key-value store
 async function getGameState(postId: string): Promise<GameState> {
-  const [shapesData, challengeData, playersData, leaderboardData, roundData] = await Promise.all([
+  const [shapesData, challengeData, playersData, leaderboardData, roundData, nextChallengeTimeData, countdownActiveData] = await Promise.all([
     redis.get(`game:${postId}:shapes`),
     redis.get(`game:${postId}:challenge`),
     redis.get(`game:${postId}:players`),
     redis.get(`game:${postId}:leaderboard`),
-    redis.get(`game:${postId}:round`)
+    redis.get(`game:${postId}:round`),
+    redis.get(`game:${postId}:nextChallengeTime`),
+    redis.get(`game:${postId}:countdownActive`)
   ]);
 
   const currentRound = roundData ? parseInt(roundData) : 0;
+  const nextChallengeStartTime = nextChallengeTimeData ? parseInt(nextChallengeTimeData) : undefined;
+  const countdownActive = countdownActiveData === 'true';
 
   return {
     shapes: shapesData ? JSON.parse(shapesData) : [],
@@ -77,7 +165,9 @@ async function getGameState(postId: string): Promise<GameState> {
     leaderboard: leaderboardData ? JSON.parse(leaderboardData) : [],
     currentRound,
     totalRounds: TOTAL_ROUNDS,
-    isActive: currentRound < TOTAL_ROUNDS
+    isActive: currentRound < TOTAL_ROUNDS,
+    ...(nextChallengeStartTime && { nextChallengeStartTime }),
+    ...(countdownActive && { countdownActive })
   };
 }
 
@@ -92,6 +182,7 @@ async function saveGameState(postId: string, gameState: GameState): Promise<void
 }
 
 async function createChallenge(postId: string): Promise<Challenge | null> {
+  console.log(`createChallenge called for post ${postId}`);
   // Get current game state to check for existing shapes and round count
   const gameState = await getGameState(postId);
   
@@ -130,94 +221,35 @@ async function createChallenge(postId: string): Promise<Challenge | null> {
     shapes: [getRandomShape(), getRandomShape(), getRandomShape()],
     colors: [getRandomColor(), getRandomColor(), getRandomColor()],
     startTime: Date.now(),
-    duration: CHALLENGE_DURATION
+    duration: 0 // No duration - challenges only end when completed
   };
 
-  await redis.set(`game:${postId}:challenge`, JSON.stringify(challenge));
+  // Update the game state with the new challenge BEFORE saving
+  gameState.currentChallenge = challenge;
   
-  // Save updated game state with new round number
+  // Save updated game state with new round number AND new challenge
   await saveGameState(postId, gameState);
+  console.log(`Challenge and game state saved for post ${postId}:`, challenge);
   
-  // Clear any existing timer for this post
+  // Verify the challenge was actually saved by reading it back immediately
+  const verifyGameState = await getGameState(postId);
+  console.log(`🔍 Immediate verification - Challenge in saved game state:`, {
+    hasChallenge: !!verifyGameState.currentChallenge,
+    challengeId: verifyGameState.currentChallenge?.id,
+    round: verifyGameState.currentRound
+  });
+  
+  // Clear any existing timer for this post (cleanup)
   if (challengeTimers.has(postId)) {
     clearTimeout(challengeTimers.get(postId)!);
+    challengeTimers.delete(postId);
   }
   
-  // Auto-clear challenge after duration if not completed
-  const timer = setTimeout(async () => {
-    await redis.del(`game:${postId}:challenge`);
-    challengeTimers.delete(postId);
-    
-    // Check if there are more rounds before starting next challenge
-    const updatedGameState = await getGameState(postId);
-    if (updatedGameState.currentRound < TOTAL_ROUNDS) {
-      setTimeout(async () => {
-        await createChallenge(postId);
-      }, CHALLENGE_INTERVAL);
-    } else {
-      console.log(`Game ${postId} completed all rounds`);
-    }
-  }, CHALLENGE_DURATION);
-  
-  challengeTimers.set(postId, timer);
+  // No timeout - challenges only progress when completed by players
   return challenge;
 }
 
-function checkChallengeCompletion(gameState: GameState): boolean {
-  if (!gameState.currentChallenge) return false;
-  
-  const challenge = gameState.currentChallenge;
-  
-  // Check if all challenge positions are filled with correct shapes and colors
-  for (let i = 0; i < challenge.positions.length; i++) {
-    const requiredPos = challenge.positions[i];
-    const requiredShape = challenge.shapes[i];
-    const requiredColor = challenge.colors[i];
-    
-    if (!requiredPos || !requiredShape || !requiredColor) {
-      return false; // Invalid challenge data
-    }
-    
-    // Find if there's a shape at this position with correct type and color
-    const matchingShape = gameState.shapes.find(shape => 
-      shape.position.x === requiredPos.x &&
-      shape.position.y === requiredPos.y &&
-      shape.position.z === requiredPos.z &&
-      shape.type === requiredShape &&
-      shape.color === requiredColor
-    );
-    
-    if (!matchingShape) {
-      return false; // Challenge not complete
-    }
-  }
-  
-  return true; // All positions filled correctly
-}
-
-async function completeChallengeAndScheduleNext(postId: string): Promise<void> {
-  // Clear current challenge
-  await redis.del(`game:${postId}:challenge`);
-  
-  // Clear any existing timer
-  if (challengeTimers.has(postId)) {
-    clearTimeout(challengeTimers.get(postId)!);
-    challengeTimers.delete(postId);
-  }
-  
-  // Check if there are more rounds before scheduling next challenge
-  const gameState = await getGameState(postId);
-  if (gameState.currentRound < TOTAL_ROUNDS) {
-    // Schedule next challenge after completion delay
-    const timer = setTimeout(async () => {
-      await createChallenge(postId);
-    }, CHALLENGE_COMPLETION_DELAY);
-    
-    challengeTimers.set(postId, timer);
-  } else {
-    console.log(`Game ${postId} completed all ${TOTAL_ROUNDS} rounds`);
-  }
-}
+// Duplicate functions removed - using the ones defined above
 
 function isPositionOccupied(shapes: PlacedShape[], position: Position3D): boolean {
   return shapes.some(shape => 
@@ -249,8 +281,41 @@ function isValidChallengeMove(gameState: GameState, shape: PlacedShape): boolean
   return shape.type === requiredShape && shape.color === requiredColor;
 }
 
+// Check if this is the first valid placement in the current challenge
+function isFirstPlacementInChallenge(gameState: GameState, currentShape: PlacedShape): boolean {
+  if (!gameState.currentChallenge) return false;
+  
+  const challenge = gameState.currentChallenge;
+  
+  // Count how many valid challenge placements have been made in this challenge
+  const validPlacements = gameState.shapes.filter(shape => {
+    // Skip the current shape we're checking
+    if (shape.id === currentShape.id) return false;
+    
+    // Check if this shape was placed after the challenge started
+    if (shape.timestamp < challenge.startTime) return false;
+    
+    // Check if this shape is a valid challenge placement
+    const challengeIndex = challenge.positions.findIndex(pos => 
+      pos.x === shape.position.x && 
+      pos.y === shape.position.y && 
+      pos.z === shape.position.z
+    );
+    
+    if (challengeIndex === -1) return false;
+    
+    const requiredShape = challenge.shapes[challengeIndex];
+    const requiredColor = challenge.colors[challengeIndex];
+    
+    return shape.type === requiredShape && shape.color === requiredColor;
+  });
+  
+  // This is the first placement if no other valid placements exist
+  return validPlacements.length === 0;
+}
+
 // Update player score in leaderboard
-function updatePlayerScore(gameState: GameState, playerId: string): void {
+function updatePlayerScore(gameState: GameState, playerId: string, bonusPoints: number = 1): void {
   let playerScore = gameState.leaderboard.find(p => p.playerId === playerId);
   
   if (!playerScore) {
@@ -258,7 +323,7 @@ function updatePlayerScore(gameState: GameState, playerId: string): void {
     gameState.leaderboard.push(playerScore);
   }
   
-  playerScore.score += 1;
+  playerScore.score += bonusPoints;
   playerScore.lastPlacement = Date.now();
   
   // Sort leaderboard by score (descending), then by last placement time (ascending for tiebreaker)
@@ -287,6 +352,8 @@ router.get('/api/init', async (_req, res): Promise<void> => {
       getGameState(postId),
       reddit.getCurrentUsername()
     ]);
+
+    // Challenge should already exist from post creation initialization
 
     res.json({
       type: 'init',
@@ -324,18 +391,13 @@ router.post('/api/join', async (_req, res): Promise<void> => {
       await saveGameState(postId, gameState);
     }
 
-    // Start challenge cycle if this is the first player and no challenge is active
-    if (gameState.players.length === 1 && !gameState.currentChallenge && !challengeTimers.has(postId)) {
-      // Create first challenge after a short delay
-      setTimeout(async () => {
-        await createChallenge(postId);
-      }, 5000);
-    }
+    // Get updated game state after saving
+    const updatedGameState = await getGameState(postId);
 
     res.json({
       type: 'join',
       success: true,
-      gameState
+      gameState: updatedGameState
     } as JoinGameResponse);
   } catch (error) {
     console.error(`Join game error:`, error);
@@ -387,31 +449,67 @@ router.post('/api/place', async (req, res): Promise<void> => {
     // Check if this is a valid challenge move before adding to game state
     const isValidMove = isValidChallengeMove(gameState, newShape);
     
+    // Check if this is the first placement in the current challenge (before adding to game state)
+    const isFirstPlacement = isValidMove && isFirstPlacementInChallenge(gameState, newShape);
+    
     // Add shape to game state
     gameState.shapes.push(newShape);
     
     // Update player score if it was a valid challenge move
+    let bonusMessage = '';
     if (isValidMove) {
-      updatePlayerScore(gameState, username ?? 'anonymous');
+      if (isFirstPlacement) {
+        // Give 2 points for first placement (1 regular + 1 bonus)
+        updatePlayerScore(gameState, username ?? 'anonymous', 2);
+        bonusMessage = ' (+1 First Place Bonus!)';
+      } else {
+        // Give 1 point for regular placement
+        updatePlayerScore(gameState, username ?? 'anonymous', 1);
+      }
     }
     
-    // Check if this placement completes the current challenge
-    if (gameState.currentChallenge && checkChallengeCompletion(gameState)) {
-      // Challenge completed! Schedule next challenge
-      await completeChallengeAndScheduleNext(postId);
-      // Update game state to reflect challenge completion
-      gameState.currentChallenge = null;
-    }
-    
+    // Save the current game state first
     await saveGameState(postId, gameState);
+    
+    // Check if this placement completes the current challenge (AFTER adding the shape)
+    let updatedGameState = gameState;
+    if (gameState.currentChallenge && checkChallengeCompletion(gameState)) {
+      // Challenge completed! Create next challenge immediately
+      console.log(`🎯 Challenge completed! Creating next challenge for post ${postId}`);
+      const newChallenge = await completeChallengeAndScheduleNext(postId);
+      
+      if (newChallenge) {
+        // Add a small delay to ensure Redis consistency
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
+        // Update the game state with the new challenge directly
+        updatedGameState = await getGameState(postId);
+        console.log(`📋 Updated game state after challenge completion:`, {
+          hasChallenge: !!updatedGameState.currentChallenge,
+          challengeId: updatedGameState.currentChallenge?.id,
+          round: updatedGameState.currentRound
+        });
+        
+        // If still no challenge, try reading directly from Redis
+        if (!updatedGameState.currentChallenge) {
+          const directChallengeRead = await redis.get(`game:${postId}:challenge`);
+          console.log(`🔍 Direct Redis read for challenge:`, directChallengeRead ? JSON.parse(directChallengeRead) : null);
+        }
+      } else {
+        // No new challenge (game completed)
+        updatedGameState.currentChallenge = null;
+        console.log(`🏁 Game completed, no more challenges`);
+      }
+    }
 
     res.json({
       type: 'place',
       success: true,
       shape: newShape,
-      gameState,
-      message: `${username ?? 'Anonymous'} placed a ${request.color} ${request.type} at (${request.position.x}, ${request.position.y}, ${request.position.z})`,
-      playerName: username ?? 'Anonymous'
+      gameState: updatedGameState,
+      message: `${username ?? 'Anonymous'} placed a ${request.color} ${request.type}${bonusMessage}`,
+      playerName: username ?? 'Anonymous',
+      isFirstPlacement: isFirstPlacement
     } as PlaceShapeResponse);
   } catch (error) {
     console.error(`Place shape error:`, error);
@@ -423,7 +521,40 @@ router.post('/api/place', async (req, res): Promise<void> => {
   }
 });
 
-// Legacy routes for app installation
+// Leaderboard API endpoint
+router.get('/api/leaderboard', async (_req, res): Promise<void> => {
+  const { postId } = context;
+  
+  if (!postId) {
+    res.status(400).json({
+      status: 'error',
+      message: 'postId is required',
+    });
+    return;
+  }
+
+  try {
+    const gameState = await getGameState(postId);
+    res.json({
+      type: 'leaderboard',
+      leaderboard: gameState.leaderboard,
+      totalPlayers: gameState.players.length,
+      currentRound: gameState.currentRound,
+      totalRounds: gameState.totalRounds
+    });
+  } catch (error) {
+    console.error(`Leaderboard error:`, error);
+    res.status(400).json({
+      type: 'leaderboard',
+      leaderboard: [],
+      totalPlayers: 0,
+      currentRound: 0,
+      totalRounds: TOTAL_ROUNDS
+    });
+  }
+});
+
+// Legacy routes for app installation and menu actions
 router.post('/internal/on-app-install', async (_req, res): Promise<void> => {
   try {
     const post = await createPost();
