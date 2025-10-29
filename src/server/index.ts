@@ -71,8 +71,6 @@ function checkChallengeCompletion(gameState: GameState): boolean {
 }
 
 async function completeChallengeAndScheduleNext(postId: string): Promise<Challenge | null> {
-  console.log(`🎉 Challenge completed for post ${postId}! Starting next challenge immediately...`);
-
   // Clear current challenge
   await redis.del(`game:${postId}:challenge`);
 
@@ -81,14 +79,10 @@ async function completeChallengeAndScheduleNext(postId: string): Promise<Challen
 
   // Check if there are more rounds before creating next challenge
   const gameState = await getGameState(postId);
-  console.log(`📊 Current game state for ${postId}: Round ${gameState.currentRound}/${TOTAL_ROUNDS}`);
 
   if (gameState.currentRound < TOTAL_ROUNDS) {
-    console.log(`🚀 Creating next challenge immediately for post ${postId}`);
-
     // Clear any existing timer first
     if (challengeTimers.has(postId)) {
-      console.log(`🧹 Clearing existing timer for post ${postId}`);
       clearTimeout(challengeTimers.get(postId)!);
       challengeTimers.delete(postId);
     }
@@ -103,21 +97,14 @@ async function completeChallengeAndScheduleNext(postId: string): Promise<Challen
       // Create next challenge immediately
       const newChallenge = await createChallenge(postId);
       if (newChallenge) {
-        console.log(`✅ New challenge created successfully for post ${postId}:`, {
-          challengeId: newChallenge.id,
-          round: (await getGameState(postId)).currentRound
-        });
         return newChallenge;
       } else {
-        console.log(`❌ Failed to create new challenge for post ${postId} - game may be complete`);
         return null;
       }
     } catch (error) {
-      console.error(`💥 Error creating next challenge for post ${postId}:`, error);
       return null;
     }
   } else {
-    console.log(`🏁 Game ${postId} completed all ${TOTAL_ROUNDS} rounds`);
     return null;
   }
 }
@@ -182,13 +169,11 @@ async function saveGameState(postId: string, gameState: GameState): Promise<void
 }
 
 async function createChallenge(postId: string): Promise<Challenge | null> {
-  console.log(`createChallenge called for post ${postId}`);
   // Get current game state to check for existing shapes and round count
   const gameState = await getGameState(postId);
 
   // Check if we've reached the maximum number of rounds
   if (gameState.currentRound >= TOTAL_ROUNDS) {
-    console.log(`Game ${postId} has completed all ${TOTAL_ROUNDS} rounds`);
     return null;
   }
 
@@ -229,15 +214,6 @@ async function createChallenge(postId: string): Promise<Challenge | null> {
 
   // Save updated game state with new round number AND new challenge
   await saveGameState(postId, gameState);
-  console.log(`Challenge and game state saved for post ${postId}:`, challenge);
-
-  // Verify the challenge was actually saved by reading it back immediately
-  const verifyGameState = await getGameState(postId);
-  console.log(`🔍 Immediate verification - Challenge in saved game state:`, {
-    hasChallenge: !!verifyGameState.currentChallenge,
-    challengeId: verifyGameState.currentChallenge?.id,
-    round: verifyGameState.currentRound
-  });
 
   // Clear any existing timer for this post (cleanup)
   if (challengeTimers.has(postId)) {
@@ -362,7 +338,6 @@ router.get('/api/init', async (_req, res): Promise<void> => {
       gameState
     } as InitResponse);
   } catch (error) {
-    console.error(`API Init Error for post ${postId}:`, error);
     res.status(400).json({
       status: 'error',
       message: error instanceof Error ? error.message : 'Unknown error'
@@ -400,7 +375,6 @@ router.post('/api/join', async (_req, res): Promise<void> => {
       gameState: updatedGameState
     } as JoinGameResponse);
   } catch (error) {
-    console.error(`Join game error:`, error);
     res.status(400).json({
       type: 'join',
       success: false,
@@ -481,33 +455,16 @@ router.post('/api/place', async (req, res): Promise<void> => {
       };
 
       const channelName = `game${postId}`;
-      console.log(`📡 ========== BROADCASTING MESSAGE ==========`);
-      console.log(`📡 Channel: ${channelName}`);
-      console.log(`📡 Message type: ${broadcastMessage.type}`);
-      console.log(`📡 Player: ${broadcastMessage.playerName}`);
-      console.log(`📡 Shape: ${broadcastMessage.shape.type} ${broadcastMessage.shape.color}`);
-      console.log(`📡 Position: (${broadcastMessage.shape.position.x}, ${broadcastMessage.shape.position.y}, ${broadcastMessage.shape.position.z})`);
-      console.log(`📡 Realtime object exists:`, !!realtime);
-      console.log(`📡 Realtime.send exists:`, typeof realtime.send);
-      console.log(`📡 ==========================================`);
-
-      const sendResult = await realtime.send(channelName, broadcastMessage);
-      console.log(`📡 ✅ Broadcast result:`, sendResult);
-      console.log(`📡 ✅ Successfully broadcasted to ${channelName}`);
+      await realtime.send(channelName, broadcastMessage);
 
     } catch (error) {
-      console.error('📡 ❌ ========== BROADCAST FAILED ==========');
-      console.error('📡 ❌ Error:', error);
-      console.error('📡 ❌ Error message:', error instanceof Error ? error.message : 'Unknown');
-      console.error('📡 ❌ Error stack:', error instanceof Error ? error.stack : 'N/A');
-      console.error('📡 ❌ ========================================');
+      // Silent error handling
     }
 
     // Check if this placement completes the current challenge (AFTER adding the shape)
     let updatedGameState = gameState;
     if (gameState.currentChallenge && checkChallengeCompletion(gameState)) {
       // Challenge completed! Create next challenge immediately
-      console.log(`🎯 Challenge completed! Creating next challenge for post ${postId}`);
       const newChallenge = await completeChallengeAndScheduleNext(postId);
 
       if (newChallenge) {
@@ -516,11 +473,6 @@ router.post('/api/place', async (req, res): Promise<void> => {
 
         // Update the game state with the new challenge directly
         updatedGameState = await getGameState(postId);
-        console.log(`📋 Updated game state after challenge completion:`, {
-          hasChallenge: !!updatedGameState.currentChallenge,
-          challengeId: updatedGameState.currentChallenge?.id,
-          round: updatedGameState.currentRound
-        });
 
         // Broadcast new challenge to all players
         try {
@@ -528,20 +480,12 @@ router.post('/api/place', async (req, res): Promise<void> => {
             type: 'newChallenge',
             gameState: updatedGameState
           });
-          console.log(`📡 Broadcasted new challenge to game${postId}`);
         } catch (error) {
-          console.error('Failed to broadcast new challenge:', error);
-        }
-
-        // If still no challenge, try reading directly from Redis
-        if (!updatedGameState.currentChallenge) {
-          const directChallengeRead = await redis.get(`game:${postId}:challenge`);
-          console.log(`🔍 Direct Redis read for challenge:`, directChallengeRead ? JSON.parse(directChallengeRead) : null);
+          // Silent error handling
         }
       } else {
         // No new challenge (game completed)
         updatedGameState.currentChallenge = null;
-        console.log(`🏁 Game completed, no more challenges`);
         
         // Broadcast game completion to all players
         try {
@@ -550,9 +494,8 @@ router.post('/api/place', async (req, res): Promise<void> => {
             type: 'gameComplete',
             gameState: updatedGameState
           });
-          console.log(`📡 Broadcasted game completion to game${postId}`);
         } catch (error) {
-          console.error('Failed to broadcast game completion:', error);
+          // Silent error handling
         }
       }
     }
@@ -567,7 +510,6 @@ router.post('/api/place', async (req, res): Promise<void> => {
       isFirstPlacement: isFirstPlacement
     } as PlaceShapeResponse);
   } catch (error) {
-    console.error(`Place shape error:`, error);
     res.json({
       type: 'place',
       success: false,
@@ -590,7 +532,6 @@ router.post('/api/test-broadcast', async (_req, res): Promise<void> => {
 
   try {
     const channelName = `game${postId}`;
-    console.log(`📡 TEST: Broadcasting to ${channelName}`);
 
     await realtime.send(channelName, {
       type: 'test',
@@ -598,15 +539,12 @@ router.post('/api/test-broadcast', async (_req, res): Promise<void> => {
       timestamp: Date.now()
     });
 
-    console.log(`📡 TEST: Broadcast sent successfully`);
-
     res.json({
       status: 'success',
       message: 'Test broadcast sent',
       channel: channelName
     });
   } catch (error) {
-    console.error('📡 TEST: Broadcast failed:', error);
     res.status(500).json({
       status: 'error',
       message: error instanceof Error ? error.message : 'Unknown error'
@@ -636,7 +574,6 @@ router.get('/api/leaderboard', async (_req, res): Promise<void> => {
       totalRounds: gameState.totalRounds
     });
   } catch (error) {
-    console.error(`Leaderboard error:`, error);
     res.status(400).json({
       type: 'leaderboard',
       leaderboard: [],
@@ -656,7 +593,6 @@ router.post('/internal/on-app-install', async (_req, res): Promise<void> => {
       message: `Post created in subreddit ${context.subredditName} with id ${post.id}`,
     });
   } catch (error) {
-    console.error(`Error creating post: ${error}`);
     res.status(400).json({
       status: 'error',
       message: 'Failed to create post',
@@ -671,7 +607,6 @@ router.post('/internal/menu/post-create', async (_req, res): Promise<void> => {
       navigateTo: `https://reddit.com/r/${context.subredditName}/comments/${post.id}`,
     });
   } catch (error) {
-    console.error(`Error creating post: ${error}`);
     res.status(400).json({
       status: 'error',
       message: 'Failed to create post',
@@ -682,7 +617,9 @@ router.post('/internal/menu/post-create', async (_req, res): Promise<void> => {
 app.use(router);
 
 const server = createServer(app);
-server.on('error', (err) => console.error(`server error; ${err.stack}`));
+server.on('error', () => {
+  // Silent error handling
+});
 
 // Cleanup timers on server shutdown
 process.on('SIGTERM', () => {

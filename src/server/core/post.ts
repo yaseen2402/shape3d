@@ -14,7 +14,7 @@ export const createPost = async () => {
       // Clean and Simple Splash Screen
       appDisplayName: 'Shape3D',
       backgroundUri: 'splash.png',
-      buttonLabel: 'Start Playing',
+      buttonLabel: 'Play',
       description: ``,
       heading: 'Shape3D',
       appIconUri: 'icon2_nobg.png',

@@ -554,8 +554,6 @@ async function joinGame(): Promise<void> {
 
 
 
-
-
 // Simple realtime connection based on docs
 async function startRealtimeConnection(): Promise<void> {
   if (!postId) {
@@ -569,10 +567,10 @@ async function startRealtimeConnection(): Promise<void> {
     realtimeConnection = await connectRealtime({
       channel: channel,
       onConnect: () => {
-        showToast('Connected to live updates!', 'success');
+        // Connected silently
       },
       onDisconnect: () => {
-        showToast('Disconnected from live updates', 'info');
+        // Disconnected silently
       },
       onMessage: (data) => {
         if (data && typeof data === 'object') {
@@ -646,7 +644,7 @@ async function placeShape(type: ShapeType, color: ShapeColor, position: Position
 
     if (data.success) {
       // Update local game state immediately for current player
-      const oldChallengeId = gameState?.currentChallenge?.id;
+      // const oldChallengeId = gameState?.currentChallenge?.id;
       gameState = data.gameState;
       updateGameDisplay();
 
@@ -663,18 +661,7 @@ async function placeShape(type: ShapeType, color: ShapeColor, position: Position
         }, 1000);
       }
 
-      // Check for challenge state changes for current player
-      const newChallengeId = gameState.currentChallenge?.id;
-
-      if (oldChallengeId && !newChallengeId) {
-        showToast('Challenge completed!', 'success');
-      } else if (oldChallengeId && newChallengeId && oldChallengeId !== newChallengeId) {
-        showToast('Challenge completed! New challenge started!', 'success');
-      } else if (!oldChallengeId && newChallengeId) {
-        showToast('New challenge started!', 'success');
-      }
-
-      // Note: Other players will receive updates via real-time events
+      // Note: Challenge state changes are handled by real-time events
     } else {
       // Show error notification for position occupied
       if (data.message) {
@@ -1427,6 +1414,12 @@ let touchStartX = 0;
 let touchStartY = 0;
 
 window.addEventListener('touchstart', (event) => {
+  // Don't handle touch if it's on a modal or scrollable element
+  const target = event.target as HTMLElement;
+  if (target.closest('.help-modal-content') || target.closest('.game-over-content') || target.closest('.toolbox-left')) {
+    return;
+  }
+
   if (event.touches.length === 1 && event.touches[0]) {
     isMouseDown = true;
     touchStartX = event.touches[0].clientX;
@@ -1437,6 +1430,12 @@ window.addEventListener('touchstart', (event) => {
 });
 
 window.addEventListener('touchmove', (event) => {
+  // Don't handle touch if it's on a modal or scrollable element
+  const target = event.target as HTMLElement;
+  if (target.closest('.help-modal-content') || target.closest('.game-over-content') || target.closest('.toolbox-left')) {
+    return;
+  }
+
   if (event.touches.length === 1 && isMouseDown && event.touches[0]) {
     const touch = event.touches[0];
     const deltaX = touch.clientX - mouseX;
