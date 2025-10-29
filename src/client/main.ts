@@ -1,4 +1,9 @@
 import * as THREE from 'three';
+import { connectRealtime } from '@devvit/web/client';
+import { context } from '@devvit/web/client';
+
+// Access postId directly from context
+
 import {
   InitResponse,
   JoinGameResponse,
@@ -10,12 +15,16 @@ import {
   GameState
 } from '../shared/types/api';
 
+let postId = context.postId;
+
+let realtimeConnection: { disconnect: () => Promise<void> } | null = null;
+
 // Game state
 let gameState: GameState | null = null;
 let username: string = '';
 let gameStarted = false;
-let lastShapeCount = 0;
-let updateInterval: NodeJS.Timeout | null = null;
+
+// let realtimeConnection: any = null;
 
 // Selected tool state
 let selectedShape: ShapeType = 'cube';
@@ -271,8 +280,6 @@ function animateCameraToPosition(newAngleX: number, newAngleY: number): void {
 
   isAnimatingCamera = true;
   animationStartTime = Date.now();
-
-  console.log(`🎬 Starting camera animation from (${(startAngleX * 180 / Math.PI).toFixed(1)}°, ${(startAngleY * 180 / Math.PI).toFixed(1)}°) to (${(targetAngleX * 180 / Math.PI).toFixed(1)}°, ${(targetAngleY * 180 / Math.PI).toFixed(1)}°)`);
 }
 
 // Easing function for smooth animation
@@ -303,8 +310,6 @@ function updateCameraAnimation(): void {
     // Normalize Y angle after animation
     while (cameraAngleY >= Math.PI * 2) cameraAngleY -= Math.PI * 2;
     while (cameraAngleY < 0) cameraAngleY += Math.PI * 2;
-
-    console.log(`✅ Camera animation complete`);
   }
 }
 
@@ -336,7 +341,6 @@ function onMouseMove(event: MouseEvent): void {
 // Update preview shape position
 function updatePreviewShape(position?: Position3D): void {
   const pos = position || previewPosition;
-  console.log(`🔄 Updating preview shape: ${selectedShape} ${selectedColor} at (${pos.x}, ${pos.y}, ${pos.z})`);
 
   if (previewShape) {
     scene.remove(previewShape);
@@ -347,7 +351,6 @@ function updatePreviewShape(position?: Position3D): void {
 
   // Create preview shape with visual feedback
   previewShape = createShape(selectedShape, selectedColor, pos, true);
-  console.log(`✨ Created preview shape with color: ${selectedColor}`);
 
   // Change preview material based on validity
   const material = previewShape.material as THREE.MeshLambertMaterial;
@@ -398,11 +401,8 @@ function movePreview(direction: 'up' | 'down' | 'left' | 'right' | 'higher' | 'l
 // Camera rotation functions
 function rotateCamera(direction: 'horizontal' | 'up' | 'down'): void {
   if (isAnimatingCamera) {
-    console.log(`🎥 Camera is already animating, ignoring ${direction} rotation`);
     return;
   }
-
-  console.log(`🎥 Rotating camera: ${direction}`);
 
   let newAngleX = cameraAngleX;
   let newAngleY = cameraAngleY;
@@ -433,11 +433,8 @@ function rotateCamera(direction: 'horizontal' | 'up' | 'down'): void {
 
 function resetCamera(): void {
   if (isAnimatingCamera) {
-    console.log(`🎥 Camera is already animating, ignoring reset`);
     return;
   }
-
-  console.log(`🎥 Resetting camera to isometric view`);
 
   // Animate to default isometric view
   animateCameraToPosition(Math.PI / 6, Math.PI / 4);
@@ -460,11 +457,8 @@ function resetCamera(): void {
 // Keep the old function for backward compatibility but make it use the new system
 function setCameraPerspective(angle: 'top' | 'front' | 'side' | 'iso'): void {
   if (isAnimatingCamera) {
-    console.log(`🎥 Camera is already animating, ignoring ${angle} perspective change`);
     return;
   }
-
-  console.log(`🎥 Camera perspective changed to: ${angle}`);
 
   let newAngleX: number;
   let newAngleY: number;
@@ -504,13 +498,13 @@ function onClick(_event: MouseEvent): void {
 // API calls
 async function initGame(): Promise<void> {
   try {
-    console.log('🚀 Initializing game...');
     const response = await fetch('/api/init');
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
     const data = (await response.json()) as InitResponse;
     if (data.type === 'init') {
       username = data.username;
+      postId = postId;
       gameState = data.gameState;
       updateGameDisplay();
 
@@ -527,8 +521,6 @@ async function initGame(): Promise<void> {
 
 async function joinGame(): Promise<void> {
   try {
-    console.log('🎮 Auto-joining game...');
-
     const response = await fetch('/api/join', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
@@ -540,20 +532,17 @@ async function joinGame(): Promise<void> {
     if (data.success) {
       gameState = data.gameState;
       gameStarted = true;
-      lastShapeCount = gameState.shapes.length;
       updateGameDisplay();
 
       // Initialize preview mode
       isPreviewMode = true;
       updatePreviewShape();
 
-      // Start polling for updates
-      startGameUpdates();
+      // Start real-time connection after username is set
+      await startRealtimeConnection();
 
       // Setup toolbox event listeners
       setupToolboxEventListeners();
-
-      console.log('✅ Game joined successfully');
     } else {
       throw new Error('Failed to join game');
     }
@@ -567,64 +556,79 @@ async function joinGame(): Promise<void> {
 
 
 
-// Start polling for game updates (only for other players' actions)
-function startGameUpdates(): void {
-  if (updateInterval) {
-    clearTimeout(updateInterval);
+// Simple realtime connection based on docs
+async function startRealtimeConnection(): Promise<void> {
+  if (!postId) {
+    return;
   }
 
-  const pollForUpdates = async () => {
-    try {
-      const response = await fetch('/api/init');
-      if (response.ok) {
-        const data = (await response.json()) as InitResponse;
-        if (data.type === 'init') {
-          const newGameState = data.gameState;
+  const channel = `game${postId}`;
 
-          // Check for new shapes placed by other players
-          if (newGameState.shapes.length > lastShapeCount) {
-            const newShapes = newGameState.shapes.slice(lastShapeCount);
-            newShapes.forEach(shape => {
-              if (shape.playerId !== username) {
-                showToast(`${shape.playerId} placed a ${shape.color} ${shape.type}`, 'info');
+  try {
+
+    realtimeConnection = await connectRealtime({
+      channel: channel,
+      onConnect: () => {
+        showToast('Connected to live updates!', 'success');
+      },
+      onDisconnect: () => {
+        showToast('Disconnected from live updates', 'info');
+      },
+      onMessage: (data) => {
+        if (data && typeof data === 'object') {
+          const msg = data as any;
+
+          if (msg.type === 'test') {
+            showToast(`Test: ${msg.message}`, 'info');
+          } else if (msg.type === 'shapePlace') {
+            if (msg.shape?.playerId !== username) {
+              if (msg.gameState) {
+                gameState = msg.gameState;
+                updateGameDisplay();
+                showToast(`${msg.playerName} placed a shape`, 'info');
               }
-            });
-          }
-
-          // Check if challenge has changed (new challenge started)
-          const challengeChanged = (
-            (!gameState?.currentChallenge && newGameState.currentChallenge) ||
-            (gameState?.currentChallenge && !newGameState.currentChallenge) ||
-            (gameState?.currentChallenge?.id !== newGameState.currentChallenge?.id)
-          );
-
-          // Update if we detect changes from other players (shapes or challenge)
-          if (newGameState.shapes.length !== gameState?.shapes.length || challengeChanged) {
-            lastShapeCount = newGameState.shapes.length;
-            gameState = newGameState;
-            updateGameDisplay();
-
-            // Show notification when a new challenge starts
-            if (challengeChanged && newGameState.currentChallenge) {
-              showToast('🎯 New challenge started!', 'info');
+            }
+          } else if (msg.type === 'newChallenge') {
+            if (msg.gameState) {
+              gameState = msg.gameState;
+              updateGameDisplay();
+              showToast('New challenge started!', 'success');
+            }
+          } else if (msg.type === 'gameComplete') {
+            if (msg.gameState) {
+              gameState = msg.gameState;
+              updateGameDisplay();
+              showToast('Game completed!', 'success');
             }
           }
         }
       }
-    } catch (err) {
-      console.error('Error polling for updates:', err);
-    }
-
-    // Schedule next poll - simple 3 second interval for other players' updates
-    updateInterval = setTimeout(pollForUpdates, 3000);
-  };
-
-  // Start polling
-  pollForUpdates();
+    });
+  } catch (error) {
+    showToast('Failed to connect to live updates', 'error');
+  }
 }
 
+// Test function to trigger a broadcast from server
+async function testRealtimeBroadcast(): Promise<void> {
+  try {
+    const response = await fetch('/api/test-broadcast', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
 
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
+    showToast('Test broadcast sent!', 'success');
+  } catch (error) {
+    showToast('Test broadcast failed', 'error');
+  }
+}
+
+// Make test function globally accessible for console testing
+if (typeof window !== 'undefined') {
+  (window as any).testRealtimeBroadcast = testRealtimeBroadcast;
+}
 
 
 async function placeShape(type: ShapeType, color: ShapeColor, position: Position3D): Promise<void> {
@@ -639,20 +643,14 @@ async function placeShape(type: ShapeType, color: ShapeColor, position: Position
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
     const data = (await response.json()) as PlaceShapeResponse;
-    console.log('Place shape response received:', {
-      success: data.success,
-      hasChallenge: !!data.gameState.currentChallenge,
-      challengeId: data.gameState.currentChallenge?.id,
-      round: data.gameState.currentRound,
-      shapesCount: data.gameState.shapes.length
-    });
 
     if (data.success) {
+      // Update local game state immediately for current player
       const oldChallengeId = gameState?.currentChallenge?.id;
       gameState = data.gameState;
       updateGameDisplay();
 
-      // Show success toast for all users
+      // Show success toast for current player only
       if (data.message) {
         const toastType = data.isFirstPlacement ? 'success' : 'success';
         showToast(data.message, toastType);
@@ -665,31 +663,18 @@ async function placeShape(type: ShapeType, color: ShapeColor, position: Position
         }, 1000);
       }
 
-      // Check for challenge state changes by comparing challenge IDs
+      // Check for challenge state changes for current player
       const newChallengeId = gameState.currentChallenge?.id;
 
-      console.log('Challenge state check:', {
-        oldChallengeId,
-        newChallengeId,
-        oldHadChallenge: !!oldChallengeId,
-        newHasChallenge: !!newChallengeId
-      });
-
       if (oldChallengeId && !newChallengeId) {
-        // Challenge was completed and no new one yet
-        console.log('Challenge completed, no new challenge');
         showToast('Challenge completed!', 'success');
       } else if (oldChallengeId && newChallengeId && oldChallengeId !== newChallengeId) {
-        // Challenge was completed and new one started
-        console.log('Challenge completed and new one started');
         showToast('Challenge completed! New challenge started!', 'success');
       } else if (!oldChallengeId && newChallengeId) {
-        // New challenge started (first challenge or after a gap)
-        console.log('New challenge started');
         showToast('New challenge started!', 'success');
-      } else {
-        console.log('No challenge state change detected');
       }
+
+      // Note: Other players will receive updates via real-time events
     } else {
       // Show error notification for position occupied
       if (data.message) {
@@ -704,13 +689,9 @@ async function placeShape(type: ShapeType, color: ShapeColor, position: Position
 
 // Update game display
 function updateGameDisplay(): void {
-  console.log('updateGameDisplay called');
   if (!gameState) {
-    console.log('No gameState, returning');
     return;
   }
-  console.log('gameState:', gameState);
-  console.log('currentChallenge:', gameState.currentChallenge);
 
 
 
@@ -732,13 +713,6 @@ function updateGameDisplay(): void {
 
 
   if (gameState.currentChallenge) {
-    console.log('Found active challenge, showing challenge card');
-    console.log('Challenge details:', {
-      id: gameState.currentChallenge.id,
-      positions: gameState.currentChallenge.positions,
-      shapes: gameState.currentChallenge.shapes,
-      colors: gameState.currentChallenge.colors
-    });
     gameState.currentChallenge.positions.forEach((pos, index) => {
       // Check if this position already has the correct shape placed
       const requiredShape = gameState?.currentChallenge?.shapes[index];
@@ -789,12 +763,9 @@ function updateGameDisplay(): void {
     });
 
     // Show enhanced challenge info whenever there's an active challenge
-    console.log('Setting challenge-info display to block');
     const challengeInfoElement = document.getElementById('challenge-info');
-    console.log('challengeInfoElement:', challengeInfoElement);
     if (challengeInfoElement) {
       challengeInfoElement.style.display = 'block';
-      console.log('Challenge card should now be visible');
 
       // Setup help button event listener now that challenge card is visible
       setupHelpButton();
@@ -804,7 +775,6 @@ function updateGameDisplay(): void {
     // Hide game over display when there's an active challenge
     document.getElementById('game-over-display')!.style.display = 'none';
   } else {
-    console.log('No active challenge found, hiding challenge card');
     // Hide challenge info when no active challenge
     document.getElementById('challenge-info')!.style.display = 'none';
 
@@ -986,6 +956,7 @@ function showGameOverDisplay(): void {
   const gameOverDisplay = document.getElementById('game-over-display');
   const gameOverStats = document.getElementById('game-over-stats');
   const leaderboardList = document.getElementById('game-over-leaderboard-list');
+
 
   if (!gameOverDisplay || !gameOverStats || !leaderboardList || !gameState) return;
 
@@ -1303,7 +1274,6 @@ function setupToolbox(): void {
       btn.className = 'selected';
       // Update preview shape with new color
       if (gameStarted && isPreviewMode) {
-        console.log(`🎨 Color changed to ${color}, updating preview`);
         updatePreviewShape();
       }
     };
@@ -1321,7 +1291,6 @@ function setupToolbox(): void {
       btn.className = 'selected';
       // Update preview shape with new color
       if (gameStarted && isPreviewMode) {
-        console.log(`🎨 Color changed to ${color}, updating preview`);
         updatePreviewShape();
       }
     };
@@ -1408,12 +1377,6 @@ function validatePlacement(position: Position3D, shapeType: ShapeType, shapeColo
 
 // Place current shape
 function placeCurrentShape(): void {
-  console.log('Place button clicked!');
-  console.log('Game started:', gameStarted);
-  console.log('Preview shape exists:', !!previewShape);
-  console.log('Preview mode:', isPreviewMode);
-  console.log('Selected shape:', selectedShape);
-  console.log('Selected color:', selectedColor);
 
   if (gameStarted && previewShape) {
     const position = isPreviewMode ? previewPosition : {
@@ -1459,11 +1422,48 @@ window.addEventListener('mouseup', () => {
   isMouseDown = false;
 });
 
-// Cleanup on page unload
-window.addEventListener('beforeunload', () => {
-  if (updateInterval) {
-    clearTimeout(updateInterval);
+// Touch controls for camera (mobile support)
+let touchStartX = 0;
+let touchStartY = 0;
+
+window.addEventListener('touchstart', (event) => {
+  if (event.touches.length === 1 && event.touches[0]) {
+    isMouseDown = true;
+    touchStartX = event.touches[0].clientX;
+    touchStartY = event.touches[0].clientY;
+    mouseX = touchStartX;
+    mouseY = touchStartY;
   }
+});
+
+window.addEventListener('touchmove', (event) => {
+  if (event.touches.length === 1 && isMouseDown && event.touches[0]) {
+    const touch = event.touches[0];
+    const deltaX = touch.clientX - mouseX;
+    const deltaY = touch.clientY - mouseY;
+
+    cameraAngleY += deltaX * 0.01;
+    cameraAngleX += deltaY * 0.01;
+
+    // Clamp vertical angle
+    cameraAngleX = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, cameraAngleX));
+
+    updateCameraPosition();
+
+    mouseX = touch.clientX;
+    mouseY = touch.clientY;
+
+    // Prevent page scrolling while rotating camera
+    event.preventDefault();
+  }
+}, { passive: false });
+
+window.addEventListener('touchend', () => {
+  isMouseDown = false;
+});
+
+window.addEventListener('touchcancel', () => {
+  isMouseDown = false;
 });
 
 // Keyboard controls for preview movement
@@ -1649,6 +1649,32 @@ function setupMovementButtons(): void {
         stopMovement();
       });
 
+      // Touch support for mobile
+      btn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+
+        // First immediate move
+        movePreview(direction);
+
+        // Start long press timer
+        longPressTimer = setTimeout(() => {
+          // Start continuous movement
+          moveInterval = setInterval(() => {
+            movePreview(direction);
+          }, 150);
+        }, 300);
+      });
+
+      btn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        stopMovement();
+      });
+
+      btn.addEventListener('touchcancel', (e) => {
+        e.preventDefault();
+        stopMovement();
+      });
+
       // Click handler - only for single clicks (not long press)
       btn.addEventListener('click', (e) => {
         e.preventDefault();
@@ -1726,7 +1752,7 @@ function setupCameraControls(): void {
   const cameraButtons = document.querySelectorAll('.camera-btn');
   console.log(`Found ${cameraButtons.length} camera buttons`);
 
-  cameraButtons.forEach((button, index) => {
+  cameraButtons.forEach((button) => {
     const buttonText = button.textContent?.trim();
 
     // Add click event listener as backup
@@ -1755,6 +1781,28 @@ function setupCameraControls(): void {
     console.log(`✅ Added event listener for ${buttonText} button`);
   });
 }
+
+// Cleanup function for realtime connection
+async function cleanupRealtimeConnection(): Promise<void> {
+  if (realtimeConnection) {
+    console.log('🧹 Cleaning up realtime connection...');
+    try {
+      await realtimeConnection.disconnect();
+      console.log('✅ Realtime connection disconnected successfully');
+      realtimeConnection = null;
+    } catch (error) {
+      console.error('❌ Error disconnecting realtime connection:', error);
+    }
+  }
+}
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+  void cleanupRealtimeConnection();
+});
+
+// Make cleanup function globally accessible
+(window as any).cleanupRealtimeConnection = cleanupRealtimeConnection;
 
 // Initialize
 void initGame();

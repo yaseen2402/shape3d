@@ -1,6 +1,10 @@
 {
   "name": "shape3d",
   "version": "1.0.0",
+  "permissions": {
+    "realtime": true,
+    "redis": true
+  },
   "post": {
     "dir": "dist/client",
     "entrypoints": {

@@ -18,17 +18,16 @@
 
   <!-- Game UI Overlay -->
   <div class="game-ui">
-
-
     <!-- Enhanced Challenge Info Card -->
-    <div id="challenge-info" class="challenge-card" style="display: none;">
+    <div id="challenge-info" class="challenge-card" style="display: none">
       <div class="challenge-header">
         <div class="progress-bar">
           <div class="progress-fill" id="progress-fill"></div>
         </div>
         <span class="progress-text" id="progress-text">0/5 Complete</span>
-        <button id="help-button" class="help-button" onclick="window.openHelpModal && window.openHelpModal()"
-          title="How to Play">?</button>
+        <button id="help-button" class="help-button" title="How to Play">
+          ?
+        </button>
         <div class="requirements-list" id="requirements-list">
           <!-- Dynamic content will be inserted here -->
         </div>
@@ -39,10 +38,11 @@
     </div>
 
     <!-- Game Over Display -->
-    <div id="game-over-display" class="game-over-display" style="display: none;">
+    <div id="game-over-display" class="game-over-display" style="display: none">
       <div class="game-over-content">
-        <button id="game-over-close-button" class="close-button"
-          onclick="window.closeGameOverDisplay && window.closeGameOverDisplay()">×</button>
+        <button id="game-over-close-button" class="close-button">
+          ×
+        </button>
         <div class="game-over-title">🎉 GAME COMPLETE! 🎉</div>
 
         <!-- Leaderboard Section -->
@@ -61,16 +61,15 @@
         </div>
 
         <div class="game-over-actions">
-          <button id="explore-button" class="explore-button"
-            onclick="window.closeGameOverDisplay && window.closeGameOverDisplay()">Explore 3D Scene</button>
+          <button id="explore-button" class="explore-button">
+            Explore 3D Scene
+          </button>
         </div>
       </div>
     </div>
 
-
-
     <!-- Countdown Display -->
-    <div id="countdown-display" class="countdown-display" style="display: none;">
+    <div id="countdown-display" class="countdown-display" style="display: none">
       <div class="countdown-content">
         <div class="countdown-title">Next Challenge In</div>
         <div class="countdown-timer" id="countdown-timer">30</div>
@@ -79,12 +78,13 @@
     </div>
 
     <!-- Help Modal -->
-    <div id="help-modal" class="help-modal" style="display: none;">
+    <div id="help-modal" class="help-modal" style="display: none">
       <div class="help-modal-content">
         <div class="help-header">
           <h2 class="help-title">How to Play Shape3D</h2>
-          <button id="help-close-button" class="close-button"
-            onclick="window.closeHelpModal && window.closeHelpModal()">×</button>
+          <button id="help-close-button" class="close-button">
+            ×
+          </button>
         </div>
 
         <div class="help-content">
@@ -118,8 +118,13 @@
           <div class="help-section">
             <h3>Scoring</h3>
             <ul>
-              <li>Place shapes in <span class="highlight">yellow highlighted</span> challenge positions</li>
-              <li>Match the required <span class="highlight">shape type</span> and <span class="highlight">color</span>
+              <li>
+                Place shapes in <span class="highlight">yellow highlighted</span> challenge
+                positions
+              </li>
+              <li>
+                Match the required <span class="highlight">shape type</span> and
+                <span class="highlight">color</span>
               </li>
               <li>Earn points for each correct placement</li>
               <li>Race other players to complete challenges first!</li>
@@ -138,13 +143,12 @@
         </div>
 
         <div class="help-footer">
-          <button id="help-got-it-button" class="got-it-button"
-            onclick="window.closeHelpModal && window.closeHelpModal()">Got it! Let's Play</button>
+          <button id="help-got-it-button" class="got-it-button">
+            Got it! Let's Play
+          </button>
         </div>
       </div>
     </div>
-
-
 
     <!-- Camera View Controls - Bottom Right -->
     <div id="camera-controls" class="camera-controls">
@@ -152,17 +156,23 @@
         <span class="camera-label">View</span>
       </div>
       <div class="camera-buttons">
-        <button class="camera-btn" onclick="rotateCamera('horizontal')" title="Rotate Horizontally">↻</button>
-        <button class="camera-btn" onclick="rotateCamera('up')" title="Look Up">↑</button>
-        <button class="camera-btn" onclick="rotateCamera('down')" title="Look Down">↓</button>
-        <button class="camera-btn camera-btn-active" onclick="resetCamera()" title="Reset to Isometric">⌂</button>
+        <button class="camera-btn" data-action="rotate-horizontal" title="Rotate Horizontally">
+          ↻
+        </button>
+        <button class="camera-btn" data-action="rotate-up" title="Look Up">↑</button>
+        <button class="camera-btn" data-action="rotate-down" title="Look Down">↓</button>
+        <button class="camera-btn camera-btn-active" data-action="reset-camera" title="Reset to Isometric">
+          ⌂
+        </button>
       </div>
     </div>
 
     <!-- Bottom Left Toolbox -->
     <div id="toolbox" class="toolbox-left">
       <div class="toolbox-header">
-        <button id="place-btn" class="place-button" onclick="placeCurrentShape()">Place Shape</button>
+        <button id="place-btn" class="place-button">
+          Place Shape
+        </button>
         <button id="toolbox-toggle" class="toolbox-toggle">▼</button>
       </div>
 
@@ -204,7 +214,6 @@
         </div>
       </div>
     </div>
-
   </div>
 
   <script type="module" src="main.ts" defer></script>
