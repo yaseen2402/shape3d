@@ -1,86 +1,53 @@
 # Shape3D - Multiplayer 3D Building Game
 
-A real-time multiplayer 3D building game built with Devvit (Reddit) and Three.js. Players compete to place shapes in a shared 3D space during timed challenges.
+A real-time multiplayer 3D building game built with Devvit (Reddit) and Three.js. Players compete to place shapes in a shared 3D space.
 
 ## Game Features
 
-🎮 **Multiplayer Building**: Real-time collaborative 3D building experience  
-🎯 **Timed Challenges**: Every 30 seconds, new challenges appear with specific shape/color/position requirements  
-🎨 **Shape Variety**: Build with cubes, triangles, and spheres in 6 different colors  
-🔧 **Grid-Based Building**: Minecraft-style grid snapping with preview system  
-⚡ **Real-Time Sync**: See other players' builds instantly with live notifications  
-🚫 **Collision Detection**: Prevents multiple players from placing shapes in the same position  
-🔔 **Toast Notifications**: Real-time alerts when players place shapes or encounter errors  
-🎮 **Advanced Controls**: WASD movement, mouse camera controls, and mobile-friendly touch controls  
-📱 **Cross-Platform**: Works on desktop and mobile with adaptive UI  
+**Multiplayer Building**: Real-time collaborative 3D building experience  
+**Shape Variety**: Build with cubes, triangles, and spheres in 6 different colors  
+**Grid-Based Building**: Minecraft-style grid snapping with preview system  
+**Real-Time Sync**: See other players' builds instantly with live notifications  
+**Collision Detection**: Prevents multiple players from placing shapes in the same position  
+**Advanced Controls**: WASD movement, mouse camera controls, and mobile-friendly touch controls  
 
 ## How to Play
 
-1. **Start Screen**: Click "Start Game" to join or "How to Play" for detailed guide
-2. **Select Tools**: Use the toolbox (bottom-left) to choose your shape and color
-3. **Build**: 
-   - **Desktop**: Use WASD to move preview cube, Q/E for height, Space to place
-   - **Mobile**: Use arrow buttons in toolbox to move preview, tap to place
-   - **Mouse**: Drag to rotate camera view
-4. **Camera**: Use transparent arrow buttons (right side) for quick perspective changes
-5. **Challenges**: Watch for challenge notifications (top-left) with yellow highlights
-6. **Compete**: Be the first to complete challenge objectives!
+### Objective
+Complete 5 rounds of challenges by placing the correct shapes in highlighted positions. First player to place each shape gets bonus points!
 
-## Game Mechanics
+### Controls
 
-- **Grid System**: 20x20 grid with vertical building support (up to 10 levels high)
-- **Shape Types**: Cube, Triangle (cone), Sphere  
-- **Colors**: Red, Blue, Green, Yellow, Purple, Orange
-- **Challenge Timing**: New challenges appear every 30 seconds OR 30 seconds after completion (whichever comes first)
-- **Building Rules**: 
-  - Can't place shapes in occupied positions (collision detection)
-  - Can build vertically up to 10 levels
-  - Real-time notifications for successful placements and errors
-  - Live updates when other players place shapes
-- **Controls**: 
-  - **WASD**: Move preview horizontally
-  - **Q/E**: Move preview up/down
-  - **Space**: Place shape
-  - **Mouse Drag**: Rotate camera
-  - **Arrow Buttons**: Mobile movement controls
-  - **Camera Buttons**: Quick perspective changes (Top, Front, Side, Isometric)
+**Desktop:**
+- **WASD** or **Arrow Keys**: Move shape preview
+- **Q/E**: Move preview up/down (height)
+- **Spacebar**: Place shape
+- **Mouse Drag**: Rotate camera around arena
+- **Camera Buttons**: Quick perspective changes
 
-## Development
+**Mobile:**
+- **Touch & Drag**: Rotate camera
+- **Arrow Buttons**: Move shape preview
+- **Place Button**: Place shape at preview position
 
-### Setup
-```bash
-npm install
-npm run build
-npm run dev
-```
+### Gameplay
 
-### Commands
-- `npm run dev` - Development mode with hot reloading
-- `npm run build` - Build for production  
-- `npm run deploy` - Deploy to Reddit
-- `npm run launch` - Build, deploy, and publish
+1. **Select Shape & Color**: Use the toolbox (bottom-left) to choose
+2. **Move Preview**: Position the transparent preview shape where you want to build
+3. **Place Shape**: Press Space (desktop) or Place button (mobile)
+4. **Complete Challenges**: Yellow rings show where shapes need to go
+   - Ghost previews show what shape/color is needed
+   - Place all 3 shapes correctly to complete the challenge
+5. **Score Points**: First player to place each challenge shape gets 2 points, others get 1 point
+6. **Win**: Player with most points after 5 rounds wins!
 
-### Architecture
-- **Client**: Three.js 3D engine with real-time multiplayer UI
-- **Server**: Express.js with Redis for game state management
-- **Platform**: Devvit (Reddit) for hosting and user management
+### Challenge Bar (Top)
+- Shows current progress
+- Lists required shapes with colors
+- Completed items are marked
+- No time limit - challenges run until completed
 
-## Technical Stack
-
-- **Frontend**: Three.js, TypeScript, HTML5 Canvas
-- **Backend**: Node.js, Express, Redis
-- **Platform**: Devvit (Reddit Apps Platform)
-- **Build**: Vite, ESLint, Prettier
-
-## Getting Started
-
-> Make sure you have Node 22 downloaded on your machine before running!
-
-1. Run `npm install` to install dependencies
-2. Run `npm run dev` to start development mode
-3. Follow the Devvit setup wizard to connect your Reddit account
-4. Your game will be available at the provided Reddit URL
 
 ## License
 
-BSD-3-Clause
+MIT

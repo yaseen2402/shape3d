@@ -181,6 +181,7 @@ scene.add(gridHelper);
 const placedShapes = new Map<string, THREE.Mesh>();
 const challengeHighlights: THREE.Mesh[] = [];
 let previewShape: THREE.Mesh | null = null;
+let previewRing: THREE.Mesh | null = null;
 
 // Raycasting for mouse interaction (commented out as not currently used)
 // const raycaster = new THREE.Raycaster();
@@ -346,6 +347,10 @@ function updatePreviewShape(position?: Position3D): void {
     scene.remove(previewShape);
   }
 
+  if (previewRing) {
+    scene.remove(previewRing);
+  }
+
   // Check if current position and shape/color combination is valid
   const validation = validatePlacement(pos, selectedShape, selectedColor);
 
@@ -365,6 +370,23 @@ function updatePreviewShape(position?: Position3D): void {
   }
 
   scene.add(previewShape);
+
+  // Create green ring indicator around preview
+  const ringGeometry = new THREE.RingGeometry(0.6, 0.9, 8);
+  const ringMaterial = new THREE.MeshBasicMaterial({
+    color: validation.valid ? 0x00ff00 : 0xff0000, // Green if valid, red if invalid
+    transparent: true,
+    opacity: 0.6
+  });
+  previewRing = new THREE.Mesh(ringGeometry, ringMaterial);
+  previewRing.position.set(
+    (pos.x + 0.5) * GRID_SPACING,
+    pos.y + 0.01,
+    (pos.z + 0.5) * GRID_SPACING
+  );
+  previewRing.rotation.x = -Math.PI / 2;
+
+  scene.add(previewRing);
 }
 
 // Move preview with WASD or arrow buttons
