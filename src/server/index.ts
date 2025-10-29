@@ -78,7 +78,12 @@ async function completeChallengeAndScheduleNext(postId: string): Promise<Challen
   await new Promise(resolve => setTimeout(resolve, 100));
 
   // Check if there are more rounds before creating next challenge
-  const gameState = await getGameState(postId);
+  let gameState = await getGameState(postId);
+
+  // Double-check after delay to prevent race conditions
+  if (gameState.currentRound >= TOTAL_ROUNDS) {
+    return null;
+  }
 
   if (gameState.currentRound < TOTAL_ROUNDS) {
     // Clear any existing timer first
