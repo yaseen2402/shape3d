@@ -1012,9 +1012,9 @@ function showGameOverDisplay(): void {
 
   // Update stats content
   gameOverStats.innerHTML = `
-    <div>🏗️ Total shapes placed: ${totalShapes}</div>
-    <div>👥 Players participated: ${playerCount}</div>
-    <div>🎯 Rounds completed: ${totalRounds}</div>
+    <div>Total shapes placed: ${totalShapes}</div>
+    <div>Players participated: ${playerCount}</div>
+    <div>Rounds completed: ${totalRounds}</div>
   `;
 
   // Show the display
