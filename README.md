@@ -4,9 +4,8 @@ A real-time multiplayer 3D building game built with Devvit (Reddit) and Three.js
 
 ## Game Features
 
-**Multiplayer Building**: Real-time collaborative 3D building experience  
+**Multiplayer Building**: Real-time  3D building experience  
 **Shape Variety**: Build with cubes, triangles, and spheres in 6 different colors  
-**Grid-Based Building**: Minecraft-style grid snapping with preview system  
 **Real-Time Sync**: See other players' builds instantly with live notifications  
 **Collision Detection**: Prevents multiple players from placing shapes in the same position  
 **Advanced Controls**: WASD movement, mouse camera controls, and mobile-friendly touch controls  
